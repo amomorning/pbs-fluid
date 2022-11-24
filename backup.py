@@ -1,7 +1,5 @@
 import taichi as ti
 
-ti.init(arch=ti.cuda)
-
 # Control flag
 wind_on = False
 MAC_on = False
@@ -14,7 +12,6 @@ dx = 1.0
 dt = 0.005 * ti.sqrt((res_x + res_y) * 0.5)
 acc = 1e-5  # accuracy
 n_iters = 1000
-r = 0.0 # Parameter for wind force
 
 # Quantities
     # Simple grid
@@ -29,6 +26,10 @@ v = ti.field(float, shape=(res_x, res_y+1))
 f_x = ti.field(float, shape=(res_x+1, res_y))
 f_y = ti.field(float, shape=(res_x, res_y+1))
 
+q_tmp = ti.field(float, shape=density.shape)
+u_tmp = ti.field(float, shape=u.shape)
+v_tmp = ti.field(float, shape=v.shape)
+
 # For rendering
 num_vertices = (res_x+1) * (res_y+1)
 num_triangles = 2*res_x*res_y
@@ -37,7 +38,7 @@ F = ti.field(int, shape = num_triangles * 3)
 
 # Apply source
 @ti.kernel
-def apply_source():
+def apply_source(density: ti.template()):
     xmin = int(0.45 * res_x)
     xmax = int(0.55 * res_y)
     ymin = int(0.10 * res_y)
@@ -50,7 +51,6 @@ def apply_source():
 @ti.kernel
 def advect_quantity(q: ti.template(), u: ti.template(), v: ti.template(), dt: float, dx: float):
     # new values stored in q_tmp
-    q_tmp = ti.field(float, shape=q.shape)
 
     for y in range(1, q.shape[1]):
         for x in range(1, q.shape[0]):
@@ -82,7 +82,8 @@ def advect_quantity(q: ti.template(), u: ti.template(), v: ti.template(), dt: fl
 
             q_tmp[x, y] = bilerp(weights, corners)
 
-    q = q_tmp
+    for x, y in q:
+        q[x,y] = q_tmp[x, y ]
 
 @ti.func
 def bilerp(weights, corners):
@@ -96,18 +97,15 @@ def bilerp(weights, corners):
     Return
     Bilinear interpolation of the square
     """
-    result = (1 - weights[0]) * (1 - weights[1]) * corners[0]
-    ... + weights[0] * (1 - weights[1]) * corners[1]
-    ... + (1 - weights[0]) * weights[0] * corners[2]
-    ... + weights[0] * weights[1] * corners[3]
+    result = ((1 - weights[0]) * (1 - weights[1]) * corners[0]
+     + weights[0] * (1 - weights[1]) * corners[1]
+     + (1 - weights[0]) * weights[0] * corners[2]
+     + weights[0] * weights[1] * corners[3])
 
     return result
 
 @ti.kernel
 def advect_velocity(u: ti.template(), v: ti.template(), dt: float, dx: float):
-    u_tmp = ti.field(float, shape=u.shape)
-    v_tmp = ti.field(float, shape=v.shape)
-
     res_x = v.shape[0]
     res_y = u.shape[1]
 
@@ -149,6 +147,10 @@ def advect_velocity(u: ti.template(), v: ti.template(), dt: float, dx: float):
             last_x_velocity = (u[x, y] + u[x+1, y] + u[x+1, y-1] + u[x, y-1]) / 4
             last_y_velocity = v[x,y]
 
+            # Last position (in grid coordinates)
+            last_x = x - last_x_velocity * dt / dx
+            last_y = y - last_y_velocity * dt / dx
+
             # Clamping
             if last_x < 1.5: last_x = 1.5
             if last_y < 1.5: last_y = 1.5
@@ -169,12 +171,19 @@ def advect_velocity(u: ti.template(), v: ti.template(), dt: float, dx: float):
 
             v_tmp = bilerp(weights, corners)
 
-    u = u_tmp
-    v = v_tmp
+    for x, y in u:
+        u[x, y] = u_tmp[x, y]
+
+    for x, y in v:
+        v[x, y] = v_tmp[x, y]
 
 # Update-after-force functions
 @ti.kernel
 def add_buoyancy(f_y: ti.template()): # Vertical buoyancy
+    """
+    Bouyancy.
+    No bouyancy at the top.
+    """
     scaling = 64.0 / f_y.shape[0]
 
     for i in range(f_y.shape[0]):
@@ -182,7 +191,11 @@ def add_buoyancy(f_y: ti.template()): # Vertical buoyancy
             f_y[i,j] += 0.1 * (density[i, j-1] + density[i,j]) / 2 * scaling
 
 @ti.kernel
-def add_wind(f_x: ti.template(), t_curr: float, dt: float): # Horizontal wind
+def add_wind(f_x: ti.template(), t_curr: float, dt: float): 
+    """
+    Wind force.
+    Full of the grid and vary along the time
+    """
     scaling = 64.0 / f_x.shape[1]
 
     r = t_curr // dt
@@ -195,6 +208,10 @@ def add_wind(f_x: ti.template(), t_curr: float, dt: float): # Horizontal wind
 
 @ti.kernel
 def apply_force(u: ti.template(), v: ti.template(), f_x:ti.template(), f_y: ti.template()):
+    """
+    Apply the force. 
+    The second step in traditional grid method.
+    """
     for i,j in u:
         u[i,j] += dt * f_x[i,j]
 
@@ -287,6 +304,9 @@ def copy_boder(pressure: ti.template()): #
 
 @ti.kernel
 def solve_poisson(pressure: ti.template(), divergence: ti.template(), acc: float, dx: float, n_iters: int):
+    """
+    Solve the Poisson equation for pressure using Gauss-Siedel method.
+    """
     dx2 = dx * dx
     residual = acc + 1
     rho = 1 
@@ -296,6 +316,7 @@ def solve_poisson(pressure: ti.template(), divergence: ti.template(), acc: float
         for y in range(1, pressure.shape[1]-1):
             for x in range(1, pressure.shape[0]-1):
                 b = -divergence[x,y] / dt * rho
+                # Update in place. 
                 pressure[x,y] = (dx2 * b + pressure[x-1, y] + pressure[x+1, y] + pressure[x, y-1] + pressure[x, y+1]) / 4
         
         residual = 0
@@ -314,6 +335,7 @@ def solve_poisson(pressure: ti.template(), divergence: ti.template(), acc: float
 def correct_velocity(pressure: ti.template(), u: ti.template(), v: ti.template(), dt: float, dx: float):
     rho = 1
 
+    # Note: velocity u_{i+1/2} is practically stored at i+1, hence xV_{i}  -= dt * (p_{i} - p_{i-1}) / dx
     for y in range(1, u.shape[1]-1):
         for x in range(0, u.shape[0]-1):
             u[x, y] = u[x, y] - dt / rho * (pressure[x, y] - pressure[x-1, y]) / dx
@@ -325,7 +347,7 @@ def correct_velocity(pressure: ti.template(), u: ti.template(), v: ti.template()
 
 # Calculation of other quantities
 @ti.kernel
-def compute_divergence(divergence: ti.template()):
+def compute_divergence(divergence: ti.template(), u: ti.template(), v: ti.template()):
     res_y = u.shape[1]
     res_x = v.shape[0]
     for y in range(2, res_y-2):
@@ -335,7 +357,7 @@ def compute_divergence(divergence: ti.template()):
             divergence[x, y] = dudx + dvdy
 
 @ti.kernel
-def compute_vorticity():
+def compute_vorticity(vorticity: ti.template(), u: ti.template(), v: ti.template()):
     res_y = u.shape[1]
     res_x = v.shape[0]
     for y in range(2, res_y-2):
@@ -348,7 +370,7 @@ def compute_vorticity():
 def reset():
     density.fill(0.0)
     pressure.fill(0.0)
-    apply_source()
+    apply_source(density)
     divergence.fill(0.0)
     vorticity.fill(0.0)
     u.fill(0.0)
@@ -356,3 +378,43 @@ def reset():
     f_x.fill(0.0)
     f_y.fill(0.0)
 
+# Integration
+def advect():
+    advect_quantity(density, u, v, dt, dx)
+    advect_velocity(u, v, dt, dx)
+
+def body_force():
+    add_buoyancy(f_y)
+    if (wind_on):
+        add_wind(f_x)
+    
+    apply_force(u, v, f_x, f_y)
+
+def projection():
+    set_Neuman(u, v)
+    set_zero(u, v)
+
+    compute_divergence(divergence, u, v)
+
+    copy_boder(pressure)
+    solve_poisson(pressure, divergence, acc, dx, n_iters)
+
+    correct_velocity(pressure, u, v, dt, dx)
+
+    compute_vorticity(vorticity, u, v)
+    compute_divergence(divergence, u, v)
+
+# Substep
+def advance():
+    apply_source(density)
+
+    body_force()
+
+    projection()
+
+    advect()
+    
+
+reset()
+
+advance()
