@@ -1,7 +1,7 @@
 import taichi as ti
 
 @ti.func
-def bilerp():
+def bilerp(x_weight, y_weight, bot_left, bot_right, top_left, top_right) -> float:
     """
     Calculate bilinear interpolation given weights and corners:
     
@@ -14,12 +14,18 @@ def bilerp():
     ------
     Bilinear interpolation of the square
     """
-    pass
+    a1 = (1 - x_weight) * (1 - y_weight) * bot_left
+    a2 = x_weight * (1 - y_weight) * bot_right
+    a3 = (1 - x_weight) * y_weight * top_left
+    a4 = x_weight * y_weight * top_right
+
+    return a1+a2+a3+a4
 
 @ti.func
 def copy_field(from_field: ti.template(), to_field: ti.template()):
     """
-    Copy the value of one ti.field to another ti.field
+    Copy the value of one ti.field to another ti.field.
+    This serves as an alternative to ti.field.copy_from since it can not be called in the Taichi-kernel scope
     
     Parameters:
     ----------
@@ -30,9 +36,18 @@ def copy_field(from_field: ti.template(), to_field: ti.template()):
     for x, y in from_field:
         to_field[x, y] = from_field[x, y]
 
+@ti.func
+def field_multiply(field: ti.template(), scalar: float):
+    for I in ti.grouped(field):
+        field[I] *= scalar
 
 @ti.func
-def forward_euler_step(y_0: float, slope: float, dt: float):
+def field_divide(field: ti.template(), scalr: float):
+    assert scalr != 0, "Divided by zero"
+    field_multiply(field, 1/scalr)
+
+@ti.func
+def forward_euler_step(y_0: float, slope: float, dt: float) -> float:
     return y_0 + slope * dt
 
 @ti.kernel
