@@ -60,53 +60,6 @@ class Plume2d():
         print("Wind: {}".format(self.wind_on))
         print("Advection method: {}".format("MacCormack" if self.MAC_on else "SL"))
         print("\n\n")
-        
-
-    # @ti.kernel
-    # def build_mesh(self):
-    #     # Build vertices
-    #     for i in self.V:
-    #         self.V[i].xyz = i%(self.res_x+1) * self.dx, int(i/(self.res_x+1)) * self.dx, 0 
-
-    #     # Build indices
-    #     for y, x in ti.ndrange(self.res_y, self.res_x):
-    #         quad_id = x + y * self.res_x
-    #         # First triangle of the square
-    #         self.F[quad_id*6 + 0] = x + y * (self.res_x + 1)
-    #         self.F[quad_id*6 + 1] = x + (y + 1) * (self.res_x + 1)
-    #         self.F[quad_id*6 + 2] = x + 1 + y * (self.res_x + 1)
-    #         # Second triangle of the square
-    #         self.F[quad_id*6 + 3] = x + 1 + (y + 1) * (self.res_x + 1)
-    #         self.F[quad_id*6 + 4] = x + 1 + y * (self.res_x + 1)
-    #         self.F[quad_id*6 + 5] = x + (y + 1) * (self.res_x + 1)
-
-    # @ti.kernel
-    # def get_colors(self):
-    #     # Get per-vertex color using interpolation
-    #     self.C.fill(0)
-    #     cmin = self.density[0,0]
-    #     cmax = cmin
-
-    #     for y, x in ti.ndrange(self.res_y + 1, self.res_x + 1):
-    #         # Clamping
-    #         x0 = max(x - 1, 0)
-    #         x1 = min(x, self.res_x - 1)
-    #         y0 = max(y - 1, 0)
-    #         y1 = min(y, self.res_y - 1)
-
-    #         c = (self.density[x0, y0] + self.density[x0, y1] + self.density[x1, y0] + self.density[x1, y1]) / 4
-    #         self.C[x + y * (self.res_x + 1)].xyz = c, c, c
-    #         if c < cmin: cmin = c
-    #         if c > cmax: cmax = c
-
-    #     grey = [0.5, 0.5, 0.5]
-    #     cyan = [0.6, 0.9, 0.92]
-
-    #     for i in self.C:
-    #         r = (self.C[i].x - cmin) / (cmax - cmin) * (cyan[0] - grey[0]) + grey[0]
-    #         g = (self.C[i].y - cmin) / (cmax - cmin) * (cyan[1] - grey[1]) + grey[1]
-    #         b = (self.C[i].z - cmin) / (cmax - cmin) * (cyan[2] - grey[2]) + grey[2]
-    #         self.C[i].xyz = r, g, b    
 
     # Apply source
     @ti.kernel
