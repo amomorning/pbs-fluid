@@ -46,16 +46,10 @@ class Plume2d():
         self.u_tmp = ti.field(float, shape=(self.res_x+1, self.res_y))
         self.v_tmp = ti.field(float, shape=(self.res_x, self.res_y+1))
 
-        # For rendering
-        num_vertices = (self.res_x+1) * (self.res_y+1)
-        num_triangles = 2*self.res_x*self.res_y
-        self.V = ti.Vector.field(3, dtype=float, shape=num_vertices)
-        self.F = ti.field(int, shape=num_triangles * 3)
-        self.C = ti.Vector.field(3, dtype=float, shape=num_vertices)
+        
 
         self.print_info()
         self.reset()
-        self.build_mesh()
 
     def print_info(self):
         print("Plume simulator starts")
@@ -65,53 +59,54 @@ class Plume2d():
         print("Time step: {}".format(self.dt))
         print("Wind: {}".format(self.wind_on))
         print("Advection method: {}".format("MacCormack" if self.MAC_on else "SL"))
-        print("\n\n\n")
+        print("\n\n")
         
 
-    @ti.kernel
-    def build_mesh(self):
-        # Build vertices
-        for i in self.V:
-            self.V[i].xyz = i%(self.res_x+1) * self.dx, int(i/(self.res_x+1)) * self.dx, 0 
+    # @ti.kernel
+    # def build_mesh(self):
+    #     # Build vertices
+    #     for i in self.V:
+    #         self.V[i].xyz = i%(self.res_x+1) * self.dx, int(i/(self.res_x+1)) * self.dx, 0 
 
-        # Build indices
-        for y, x in ti.ndrange(self.res_y, self.res_x):
-            quad_id = x + y * self.res_x
-            # First triangle of the square
-            self.F[quad_id*6 + 0] = x + y * (self.res_x + 1)
-            self.F[quad_id*6 + 1] = x + (y + 1) * (self.res_x + 1)
-            self.F[quad_id*6 + 2] = x + 1 + y * (self.res_x + 1)
-            # Second triangle of the square
-            self.F[quad_id*6 + 3] = x + 1 + (y + 1) * (self.res_x + 1)
-            self.F[quad_id*6 + 4] = x + 1 + y * (self.res_x + 1)
-            self.F[quad_id*6 + 5] = x + (y + 1) * (self.res_x + 1)
+    #     # Build indices
+    #     for y, x in ti.ndrange(self.res_y, self.res_x):
+    #         quad_id = x + y * self.res_x
+    #         # First triangle of the square
+    #         self.F[quad_id*6 + 0] = x + y * (self.res_x + 1)
+    #         self.F[quad_id*6 + 1] = x + (y + 1) * (self.res_x + 1)
+    #         self.F[quad_id*6 + 2] = x + 1 + y * (self.res_x + 1)
+    #         # Second triangle of the square
+    #         self.F[quad_id*6 + 3] = x + 1 + (y + 1) * (self.res_x + 1)
+    #         self.F[quad_id*6 + 4] = x + 1 + y * (self.res_x + 1)
+    #         self.F[quad_id*6 + 5] = x + (y + 1) * (self.res_x + 1)
 
-    @ti.kernel
-    def get_color(self):
-        # Get per-vertex color using interpolation
-        cmin = self.density[0,0]
-        cmax = cmin
+    # @ti.kernel
+    # def get_colors(self):
+    #     # Get per-vertex color using interpolation
+    #     self.C.fill(0)
+    #     cmin = self.density[0,0]
+    #     cmax = cmin
 
-        for y, x in ti.ndrange(self.res_y+1, self.res_x+1):
-            # Clamping
-            x0 = max(x - 1, 0)
-            x1 = min(x, self.res_x - 1)
-            y0 = max(y - 1, 0)
-            y1 = min(y, self.res_y - 1)
+    #     for y, x in ti.ndrange(self.res_y + 1, self.res_x + 1):
+    #         # Clamping
+    #         x0 = max(x - 1, 0)
+    #         x1 = min(x, self.res_x - 1)
+    #         y0 = max(y - 1, 0)
+    #         y1 = min(y, self.res_y - 1)
 
-            c = (self.density[x0, y0] + self.density[x0, y1] + self.density[x1, y0] + self.density[x1, y1]) / 4
-            self.C[x + y * (self.res_x + 1)].xyz = c, c, c
-            if c < cmin: cmin = c
-            if c > cmax: cmax = c
+    #         c = (self.density[x0, y0] + self.density[x0, y1] + self.density[x1, y0] + self.density[x1, y1]) / 4
+    #         self.C[x + y * (self.res_x + 1)].xyz = c, c, c
+    #         if c < cmin: cmin = c
+    #         if c > cmax: cmax = c
 
-        grey = [0.5, 0.5, 0.5]
-        cyan = [0.6, 0.9, 0.92]
+    #     grey = [0.5, 0.5, 0.5]
+    #     cyan = [0.6, 0.9, 0.92]
 
-        for i in self.C:
-            r = (self.C[i].x - cmin) / (cmax - cmin) * (cyan[0] - grey[0]) + grey[0]
-            g = (self.C[i].y - cmin) / (cmax - cmin) * (cyan[1] - grey[1]) + grey[1]
-            b = (self.C[i].z - cmin) / (cmax - cmin) * (cyan[2] - grey[2]) + grey[2]
-            self.C[i].xyz = r, g, b    
+    #     for i in self.C:
+    #         r = (self.C[i].x - cmin) / (cmax - cmin) * (cyan[0] - grey[0]) + grey[0]
+    #         g = (self.C[i].y - cmin) / (cmax - cmin) * (cyan[1] - grey[1]) + grey[1]
+    #         b = (self.C[i].z - cmin) / (cmax - cmin) * (cyan[2] - grey[2]) + grey[2]
+    #         self.C[i].xyz = r, g, b    
 
     # Apply source
     @ti.kernel
@@ -121,7 +116,7 @@ class Plume2d():
         In future should be renamed `initialize()` to apply more initial conditions
         """
         xmin = int(0.45 * self.res_x)
-        xmax = int(0.55 * self.res_y)
+        xmax = int(0.55 * self.res_x)
         ymin = int(0.10 * self.res_y)
         ymax = int(0.15 * self.res_y)
         for x in range(xmin, xmax):
@@ -257,7 +252,7 @@ class Plume2d():
     def add_buoyancy(self):
         """
         Bouyancy.
-        No bouyancy at the top.
+        No bouyancy at the bottom and the top.
         """
         scaling = 64.0 / self.f_y.shape[0]
 
@@ -287,12 +282,12 @@ class Plume2d():
         The second step in traditional grid method.
         """
         for x, y in self.u:
-            self.u[x, y] = forward_euler_step(y_0=self.u[x, y], slope=self.f_x[x, y], dt=self.dt)
-            # self.u[x, y] += self.dt * self.f_x[x, y]
+            # self.u[x, y] = forward_euler_step(y_0=self.u[x, y], slope=self.f_x[x, y], dt=self.dt)
+            self.u[x, y] += self.dt * self.f_x[x, y]
 
         for x, y in self.v:
-            self.v[x, y] = forward_euler_step(y_0=self.v[x, y], slope=self.f_y[x, y], dt=self.dt)
-            # self.v[x, y] += self.dt * self.f_y[x, y]
+            # self.v[x, y] = forward_euler_step(y_0=self.v[x, y], slope=self.f_y[x, y], dt=self.dt)
+            self.v[x, y] += self.dt * self.f_y[x, y]
 
     @ti.kernel
     def set_neumann(self):
