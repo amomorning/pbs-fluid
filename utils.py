@@ -94,6 +94,8 @@ def get_plane_colors(C: ti.template(), q: ti.template(), res_x: int, res_y: int)
     # Get per-vertex color using interpolation
     cmin = q[0,0]
     cmax = cmin
+    # cmin = q[0, 0]
+    # cmax = q[0, 0]
 
     for y in range(res_y + 1):
         for x in range(res_x + 1):
@@ -107,9 +109,6 @@ def get_plane_colors(C: ti.template(), q: ti.template(), res_x: int, res_y: int)
             C[x + y * (res_x + 1)].xyz = c, c, c
             if c < cmin: cmin = c
             if c > cmax: cmax = c
-
-    # cmax = 1
-    # cmin = 0
 
     color1 = [0, 0, 0]
     color2 = [1, 1, 1]

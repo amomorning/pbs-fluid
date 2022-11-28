@@ -6,7 +6,7 @@ from utils import (bilerp,
                    compute_vorticity)
 import numpy as np
 
-ti.init(arch=ti.cuda)
+ti.init(arch=ti.vulkan)
 
 @ti.data_oriented
 class Plume2d():
@@ -113,8 +113,8 @@ class Plume2d():
                 x_weight = last_x - x_low
                 y_weight = last_y - y_low
 
-                self.density_tmp[x, y] = bilerp(x_weight, y_weight, 
-                                                bot_left, bot_right, top_left, top_right)
+                self.density_tmp[x, y] = x_weight * y_weight * self.density[x_high, y_high] + (1 - x_weight) * y_weight * self.density[x_low, y_high] + x_weight * (1 - y_weight) * self.density[x_high, y_low] + (1 - x_weight) * (1 - y_weight) * self.density[x_low, y_low]
+
 
         copy_field(self.density_tmp, self.density)
 
@@ -161,8 +161,7 @@ class Plume2d():
                 x_weight = last_x - x_low
                 y_weight = last_y - y_low
 
-                self.u_tmp[x, y] = bilerp(x_weight, y_weight, 
-                                          bot_left, bot_right, top_left, top_right)
+                self.u_tmp[x, y] = x_weight * y_weight * self.u[x_high, y_high] + (1 - x_weight) * y_weight * self.u[x_low, y_high] + x_weight * (1 - y_weight) * self.u[x_high, y_low] + (1 - x_weight) * (1 - y_weight) * self.u[x_low, y_low]
 
         # Advect v
         for y in range(1, self.v.shape[1] - 1):
@@ -198,8 +197,7 @@ class Plume2d():
                 x_weight = last_x - x_low
                 y_weight = last_y - y_low
 
-                self.v_tmp[x, y] = bilerp(x_weight, y_weight, 
-                                          bot_left, bot_right, top_left, top_right)
+                self.v_tmp[x, y] = x_weight * y_weight * self.v[x_high, y_high] + (1 - x_weight) * y_weight * self.v[x_low, y_high] + x_weight * (1 - y_weight) * self.v[x_high, y_low] + (1 - x_weight) * (1 - y_weight) * self.v[x_low, y_low]
 
         copy_field(self.u_tmp, self.u)
         copy_field(self.v_tmp, self.v)
@@ -214,7 +212,8 @@ class Plume2d():
 
         for i in range(self.f_y.shape[0]):
             for j in range(1, self.f_y.shape[1]-1):
-                self.f_y[i,j] += 0.1 * (self.density[i, j-1] + self.density[i,j]) / 2 * scaling
+                self.f_y[i, j] += 0.1 * (self.density[i, j-1] + self.density[i,j]) / 2 * scaling
+
 
     @ti.kernel
     def add_wind(self):
@@ -366,6 +365,7 @@ class Plume2d():
         # Note: velocity u_{i+1/2} is practically stored at i+1, hence xV_{i}  -= dt * (p_{i} - p_{i-1}) / dx
         for y in range(1, self.u.shape[1]-1):
             for x in range(1, self.u.shape[0]-1):
+            for x in range(1, self.u.shape[0]-1):
                 self.u[x, y] = self.u[x, y] - self.dt / rho * (self.pressure[x, y] - self.pressure[x-1, y]) / self.dx
 
         for y in range(1, self.v.shape[1] - 1):
@@ -422,6 +422,8 @@ class Plume2d():
         self.body_force()
         self.projection()
         self.advect()
+        self.f_x.fill(0)
+        self.f_y.fill(0)
         self.f_x.fill(0)
         self.f_y.fill(0)
         self.t_curr += self.dt
