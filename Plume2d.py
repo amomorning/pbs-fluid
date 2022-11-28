@@ -46,8 +46,6 @@ class Plume2d():
         self.u_tmp = ti.field(float, shape=(self.res_x+1, self.res_y))
         self.v_tmp = ti.field(float, shape=(self.res_x, self.res_y+1))
 
-        
-
         self.print_info()
         self.reset()
 
@@ -103,18 +101,13 @@ class Plume2d():
                 y_low = int(last_y)
                 x_high = x_low + 1
                 y_high = y_low + 1
-
-                bot_left = self.density[x_low, y_low]
-                bot_right = self.density[x_high, y_low]
-                top_left = self.density[x_low, y_high]
-                top_right = self.density[x_high, x_high]
                 
                 # Bilinear interpolation weights
                 x_weight = last_x - x_low
                 y_weight = last_y - y_low
 
-                self.density_tmp[x, y] = bilerp(x_weight, y_weight, 
-                                                bot_left, bot_right, top_left, top_right)
+                self.density_tmp[x, y] = x_weight * y_weight * self.density[x_high, y_high] + (1 - x_weight) * y_weight * self.density[x_low, y_high] + x_weight * (1 - y_weight) * self.density[x_high, y_low] + (1 - x_weight) * (1 - y_weight) * self.density[x_low, y_low]
+
 
         copy_field(self.density_tmp, self.density)
 
@@ -150,17 +143,13 @@ class Plume2d():
                 x_high = x_low + 1
                 y_high = y_low + 1
 
-                bot_left = self.u[x_low, y_low]
-                bot_right = self.u[x_high, y_low]
-                top_left = self.u[x_low, y_high]
-                top_right = self.u[x_high, x_high]
+
 
                 # Bilinear interpolation weights
                 x_weight = last_x - x_low
                 y_weight = last_y - y_low
 
-                self.u_tmp[x, y] = bilerp(x_weight, y_weight, 
-                                          bot_left, bot_right, top_left, top_right)
+                self.u_tmp[x, y] = x_weight * y_weight * self.u[x_high, y_high] + (1 - x_weight) * y_weight * self.u[x_low, y_high] + x_weight * (1 - y_weight) * self.u[x_high, y_low] + (1 - x_weight) * (1 - y_weight) * self.u[x_low, y_low]
 
         # Advect v
         for y in range(1, self.v.shape[1] - 1):
@@ -187,17 +176,11 @@ class Plume2d():
                 x_high = x_low + 1
                 y_high = y_low + 1
 
-                bot_left = self.v[x_low, y_low]
-                bot_right = self.v[x_high, y_low]
-                top_left = self.v[x_low, y_high]
-                top_right = self.v[x_high, x_high]
-
                 # Bilinear interpolation weights
                 x_weight = last_x - x_low
                 y_weight = last_y - y_low
 
-                self.v_tmp[x, y] = bilerp(x_weight, y_weight, 
-                                          bot_left, bot_right, top_left, top_right)
+                self.v_tmp[x, y] = x_weight * y_weight * self.v[x_high, y_high] + (1 - x_weight) * y_weight * self.v[x_low, y_high] + x_weight * (1 - y_weight) * self.v[x_high, y_low] + (1 - x_weight) * (1 - y_weight) * self.v[x_low, y_low]
 
         copy_field(self.u_tmp, self.u)
         copy_field(self.v_tmp, self.v)
@@ -212,7 +195,8 @@ class Plume2d():
 
         for i in range(self.f_y.shape[0]):
             for j in range(1, self.f_y.shape[1]-1):
-                self.f_y[i,j] += 0.1 * (self.density[i, j-1] + self.density[i,j]) / 2 * scaling
+                self.f_y[i, j] += 0.1 * (self.density[i, j-1] + self.density[i,j]) / 2 * scaling
+
 
     @ti.kernel
     def add_wind(self):
@@ -296,7 +280,7 @@ class Plume2d():
         sy = self.v.shape[1]
         for y in range(sy):
             self.v[0,y] = 0
-            self.v[sy-1, y] = 0
+            self.v[sx-1, y] = 0
 
     @ti.kernel
     def copy_border(self):
@@ -362,7 +346,7 @@ class Plume2d():
         # ???
         # Note: velocity u_{i+1/2} is practically stored at i+1, hence xV_{i}  -= dt * (p_{i} - p_{i-1}) / dx
         for y in range(1, self.u.shape[1]-1):
-            for x in range(0, self.u.shape[0]-1):
+            for x in range(1, self.u.shape[0]-1):
                 self.u[x, y] = self.u[x, y] - self.dt / rho * (self.pressure[x, y] - self.pressure[x-1, y]) / self.dx
 
         for y in range(1, self.v.shape[1] - 1):
@@ -419,6 +403,8 @@ class Plume2d():
         self.body_force()
         self.projection()
         self.advect()
+        self.f_x.fill(0)
+        self.f_y.fill(0)
         self.t_curr += self.dt
         self.n_steps += 1
 

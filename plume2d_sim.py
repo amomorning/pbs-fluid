@@ -10,7 +10,7 @@ res_x = 128
 res_y = int(res_x * 1.5)
 dx = 1
 dt = 0.005 * ti.sqrt((res_x + res_y) * 0.5)
-accuracy = 1e-3
+accuracy = 1e-5
 n_iters = 1000
 
 args = {
