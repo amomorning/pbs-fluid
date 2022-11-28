@@ -2,7 +2,6 @@ import taichi as ti
 from utils import (bilerp, 
                    copy_field,
                    compute_divergence,
-                   field_divide,
                    compute_vorticity)
 
 @ti.data_oriented
@@ -40,7 +39,9 @@ class Plume2d():
         # Temporary quantities
         self.density_tmp = ti.field(float, shape=(self.res_x, self.res_y))
         self.u_tmp = ti.field(float, shape=(self.res_x+1, self.res_y))
+        self.u_half = ti.field(float, shape=(self.res_x+1, self.res_y))
         self.v_tmp = ti.field(float, shape=(self.res_x, self.res_y+1))
+        self.v_half = ti.field(float, shape=(self.res_x, self.res_y+1))
 
     
         self.print_info()
@@ -71,6 +72,90 @@ class Plume2d():
             for y in range(ymin, ymax):
                 self.density[x, y] = 1
                 self.v[x,y] = 2
+
+        copy_field(self.u, self.u_tmp)
+        copy_field(self.v, self.v_tmp)
+
+    @ti.kernel
+    def advect_velocity_tmp(self, u: ti.template(), v: ti.template()):
+        for y in range(1, self.u.shape[1] - 1):
+            for x in range(1, self.u.shape[0] - 1):
+                # Velocity at MAC grid points, v is interpolated by the surrounding 4 grid points
+                last_x_velocity = self.u[x, y] 
+                last_y_velocity = (self.v[x, y] + self.v[x-1, y] + self.v[x-1, y+1] + self.v[x, y+1]) / 4
+
+                # Last position of the particle (in grid coordinates, that's why divided by dx)
+                # last_x = forward_euler_step(y_0=x*self.dx, slope=last_x_velocity, dt=-self.dt) / self.dx
+                # last_y = forward_euler_step(y_0=y*self.dx, slope=last_y_velocity, dt=-self.dt) / self.dx
+                last_x = x - last_x_velocity / self.dx * self.dt
+                last_y = y - last_y_velocity / self.dx * self.dt
+
+
+                # Make sure the coordinates are inside the boundaries
+                # Being conservative, one can say that the velocities are known between 1.5 and res-2.5
+                # (the MAC grid is inside the known densities, which are between 1 and res - 2)
+                # Clamping
+                if last_x < 1.5: last_x = 1.5
+                if last_y < 1.5: last_y = 1.5
+                if last_x > self.res_x - 1.5: last_x = self.res_x - 1.5
+                if last_y > self.res_y - 2.5: last_y = self.res_y - 2.5
+
+                # Corners for bilinear interpolation
+                x_low = int(last_x)
+                y_low = int(last_y)
+                x_high = x_low + 1
+                y_high = y_low + 1
+
+                bot_left = u[x_low, y_low]
+                bot_right = u[x_high, y_low]
+                top_left = u[x_low, y_high]
+                top_right = u[x_high, y_high]
+
+                # Bilinear interpolation weights
+                x_weight = last_x - x_low
+                y_weight = last_y - y_low
+
+                self.u_tmp[x, y] = bilerp(x_weight, y_weight,
+                                          bot_left, bot_right, top_left, top_right)
+
+        # Advect v
+        for y in range(1, self.v.shape[1] - 1):
+            for x in range(1, self.v.shape[0] - 1):
+                # Velocity at MAC grid points, u is interpolated by the surrounding 4 grid points
+                last_x_velocity = (u[x, y] + u[x+1, y] + u[x+1, y-1] + u[x, y-1]) / 4
+                last_y_velocity = v[x,y]
+
+                # Last position (in grid coordinates)
+                # last_x = forward_euler_step(y_0=x*self.dx, slope=last_x_velocity, dt=-self.dt) / self.dx
+                # last_y = forward_euler_step(y_0=y*self.dx, slope=last_y_velocity, dt=-self.dt) / self.dx
+                last_x = x - last_x_velocity * self.dt / self.dx
+                last_y = y - last_y_velocity * self.dt / self.dx
+
+                # Clamping
+                if last_x < 1.5: last_x = 1.5
+                if last_y < 1.5: last_y = 1.5
+                if last_x > self.res_x - 2.5: last_x = self.res_x - 2.5
+                if last_y > self.res_y - 1.5: last_y = self.res_y - 1.5
+
+                # Corners for bilinear interpolation
+                x_low = int(last_x)
+                y_low = int(last_y)
+                x_high = x_low + 1
+                y_high = y_low + 1
+
+                bot_left = self.v[x_low, y_low]
+                bot_right = self.v[x_high, y_low]
+                top_left = self.v[x_low, y_high]
+                top_right = self.v[x_high, y_high]
+
+                # Bilinear interpolation weights
+                x_weight = last_x - x_low
+                y_weight = last_y - y_low
+
+                self.v_half[x, y] = bilerp(x_weight, y_weight,
+                                          bot_left, bot_right, top_left, top_right)
+        copy_field(self.u_tmp, self.u)
+        copy_field(self.v_tmp, self.v)
 
     # Advection
     # Semi Lagrangian
@@ -382,7 +467,7 @@ class Plume2d():
             residual /= (self.res_x - 2) * (self.res_y - 2)
 
             it += 1
-        print(f"Poisson residual {residual}, takes {it} iterations")
+        # print(f"Poisson residual {residual}, takes {it} iterations")
 
     @ti.kernel
     def correct_velocity(self):
@@ -415,6 +500,14 @@ class Plume2d():
         # Using SL to solve advection equation
         self.advect_density_SL()
         self.advect_velocity_SL()
+
+    @ti.kernel
+    def reflect(self):
+        for x, y in self.u_half:
+            self.u_half[x, y] = 2 * self.u[x, y] - self.u_tmp[x, y]
+        
+        for x, y in self.v_half:
+            self.v_half[x, y] = 2 * self.v[x, y] - self.v_tmp[x ,y]
     
     def body_force(self):
         self.add_buoyancy()
@@ -454,4 +547,18 @@ class Plume2d():
         self.t_curr += self.dt
         self.n_steps += 1
 
+    def substep_reflection(self):
+        self.dt /= 2
+        self.apply_source()
+        # self.body_force()
+        self.projection()
+        self.reflect()
+        self.advect_velocity_tmp(self.u_half, self.v_half)
+        self.advect_density_SL()
+        self.projection()
+        self.advect()
+        self.f_x.fill(0)
+        self.f_y.fill(0)
+        self.t_curr += 2*self.dt
+        self.n_steps += 1
     

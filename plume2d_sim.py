@@ -42,12 +42,15 @@ canvas.set_background_color((0, 0, 0))
 scene = ti.ui.Scene()
 camera = ti.ui.Camera()
 
+substeps = 10
+
 while window.running:
     # if plume.t_curr > 200:
     #     # Reset
     #     plume.reset()
 
-    plume.substep()
+    for _ in range(substeps):
+        plume.substep_reflection()
     get_plane_colors(C, plume.density, res_x, res_y)
 
     camera.position(plume.res_x / 2, plume.res_y / 2, 240)
