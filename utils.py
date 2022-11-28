@@ -92,8 +92,8 @@ def build_plane_mesh(V: ti.template(), F: ti.template(), res_x: int, res_y: int,
 @ti.kernel
 def get_plane_colors(C: ti.template(), q: ti.template(), res_x: int, res_y: int):
     # Get per-vertex color using interpolation
-    cmin = q[0,0]
-    cmax = cmin
+    cmin: ti.f32 = 0
+    cmax: ti.f32 = 1
     # cmin = q[0, 0]
     # cmax = q[0, 0]
 
@@ -107,8 +107,8 @@ def get_plane_colors(C: ti.template(), q: ti.template(), res_x: int, res_y: int)
 
             c = (q[x0, y0] + q[x0, y1] + q[x1, y0] + q[x1, y1]) / 4
             C[x + y * (res_x + 1)].xyz = c, c, c
-            if c < cmin: cmin = c
-            if c > cmax: cmax = c
+            # if c < cmin: cmin = c
+            # if c > cmax: cmax = c
 
     color1 = [0, 0, 0]
     color2 = [1, 1, 1]

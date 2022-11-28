@@ -1,13 +1,14 @@
 import taichi as ti
-import numpy as np
 from utils import (
     build_plane_mesh,
     get_plane_colors
 )
 from Plume2d import Plume2d
 
+ti.init(arch=ti.cuda)
+
 res_x = 128
-res_y = int(res_x * 1.5)
+res_y = int(res_x * 1)
 dx = 1
 dt = 0.005 * ti.sqrt((res_x + res_y) * 0.5)
 accuracy = 1e-5
@@ -23,6 +24,7 @@ args = {
 }
 
 plume = Plume2d(args)
+# plume.wind_on = True
 
 # For rendering
 num_vertices = (res_x+1) * (res_y+1)

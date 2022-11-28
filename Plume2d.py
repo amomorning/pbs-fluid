@@ -4,9 +4,6 @@ from utils import (bilerp,
                    compute_divergence,
                    field_divide,
                    compute_vorticity)
-import numpy as np
-
-ti.init(arch=ti.vulkan)
 
 @ti.data_oriented
 class Plume2d():
@@ -73,6 +70,7 @@ class Plume2d():
         for x in range(xmin, xmax):
             for y in range(ymin, ymax):
                 self.density[x, y] = 1
+                self.v[x,y] = 2
 
     # Advection
     # Semi Lagrangian
@@ -113,7 +111,8 @@ class Plume2d():
                 x_weight = last_x - x_low
                 y_weight = last_y - y_low
 
-                self.density_tmp[x, y] = x_weight * y_weight * self.density[x_high, y_high] + (1 - x_weight) * y_weight * self.density[x_low, y_high] + x_weight * (1 - y_weight) * self.density[x_high, y_low] + (1 - x_weight) * (1 - y_weight) * self.density[x_low, y_low]
+                self.density_tmp[x, y] = bilerp(x_weight, y_weight,
+                                                bot_left, bot_right, top_left, top_right)
 
 
         copy_field(self.density_tmp, self.density)
@@ -161,8 +160,8 @@ class Plume2d():
                 x_weight = last_x - x_low
                 y_weight = last_y - y_low
 
-                self.u_tmp[x, y] = x_weight * y_weight * self.u[x_high, y_high] + (1 - x_weight) * y_weight * self.u[x_low, y_high] + x_weight * (1 - y_weight) * self.u[x_high, y_low] + (1 - x_weight) * (1 - y_weight) * self.u[x_low, y_low]
-
+                self.u_tmp[x, y] = bilerp(x_weight, y_weight,
+                                          bot_left, bot_right, top_left, top_right)
         # Advect v
         for y in range(1, self.v.shape[1] - 1):
             for x in range(1, self.v.shape[0] - 1):
@@ -197,8 +196,8 @@ class Plume2d():
                 x_weight = last_x - x_low
                 y_weight = last_y - y_low
 
-                self.v_tmp[x, y] = x_weight * y_weight * self.v[x_high, y_high] + (1 - x_weight) * y_weight * self.v[x_low, y_high] + x_weight * (1 - y_weight) * self.v[x_high, y_low] + (1 - x_weight) * (1 - y_weight) * self.v[x_low, y_low]
-
+                self.v_tmp[x, y] = bilerp(x_weight, y_weight,
+                                          bot_left, bot_right, top_left, top_right)
         copy_field(self.u_tmp, self.u)
         copy_field(self.v_tmp, self.v)
 
@@ -289,15 +288,42 @@ class Plume2d():
         """
         sx = self.u.shape[0]
         sy = self.u.shape[1]
-        for x in range(sx):
-            self.u[x, 0] = 0
-            self.u[x, sy-1] = 0
+        for y in range(sy):
+            self.u[0, y] = 0
+            self.u[sx-1, y] = 0
 
         sx = self.v.shape[0]
         sy = self.v.shape[1]
-        for y in range(sy):
-            self.v[0, y] = 0
-            self.v[sx-1, y] = 0
+        for x in range(sx):
+            self.v[x, 0] = 0
+            self.v[x, sy-1] = 0
+
+    @ti.kernel
+    def set_vel_boundary(self):
+        # Corners are have zero velocity
+        for x, y in self.u:
+            if ((x == 0 and y == 0) 
+             or (x == 0 and y == self.u.shape[1]-1)
+             or (x == self.u.shape[0]-1 and y == 0)
+             or (x == self.u.shape[0]-1 and y == self.u.shape[1]-1)):
+                self.u[x, y] = 0
+            elif x == 0:
+                self.u[x, y] = -self.u[x+1, y]
+            elif x == self.u.shape[0] - 1:
+                self.u[x, y] = -self.u[x-1, y]
+        
+        for x, y in self.v:
+            if ((x == 0 and y == 0) 
+             or (x == 0 and y == self.u.shape[1]-1)
+             or (x == self.u.shape[0]-1 and y == 0)
+             or (x == self.u.shape[0]-1 and y == self.u.shape[1]-1)):
+                self.v[x, y] = 0
+            elif y == 0:
+                self.v[x, y] = -self.v[x, y+1]
+            elif y == self.v.shape[1] - 1:
+                self.v[x, y] = -self.v[x, y-1]
+
+
 
     @ti.kernel
     def copy_border(self):
@@ -361,10 +387,8 @@ class Plume2d():
     @ti.kernel
     def correct_velocity(self):
         rho = 1
-        # ???
         # Note: velocity u_{i+1/2} is practically stored at i+1, hence xV_{i}  -= dt * (p_{i} - p_{i-1}) / dx
         for y in range(1, self.u.shape[1]-1):
-            for x in range(1, self.u.shape[0]-1):
             for x in range(1, self.u.shape[0]-1):
                 self.u[x, y] = self.u[x, y] - self.dt / rho * (self.pressure[x, y] - self.pressure[x-1, y]) / self.dx
 
@@ -401,8 +425,8 @@ class Plume2d():
 
     def projection(self):
         # Velocity border condition
-        self.set_neumann()
-        self.set_zero()
+        # self.set_neumann()
+        
 
         # Prepare the Poisson equation (r.h.s)
         compute_divergence(self.divergence, self.u, self.v, self.dx)
@@ -414,6 +438,8 @@ class Plume2d():
         self.solve_poisson()
         self.correct_velocity()
 
+        self.set_zero()
+
         compute_divergence(self.divergence, self.u, self.v, self.dx)
         compute_vorticity(self.vorticity, self.u, self.v, self.dx)
 
@@ -422,8 +448,7 @@ class Plume2d():
         self.body_force()
         self.projection()
         self.advect()
-        self.f_x.fill(0)
-        self.f_y.fill(0)
+        self.set_zero()
         self.f_x.fill(0)
         self.f_y.fill(0)
         self.t_curr += self.dt

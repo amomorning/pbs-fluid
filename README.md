@@ -30,15 +30,13 @@ The new value of $q$ at some point $\mathbf{x}$ in space is just what the old va
 Imagine we have a hypothetical particle. At time $t$, it has an old value $q_{P}^{n}$ at point $\mathbf{x}_{P}$, and at time $t+\Delta t$, it has a new value $q^{n+1}_{G}$ at point $\mathbf{x}_{G}$. Then $q_{G}^{n+1} = q_{P}^{n}$.
 
 If we have the current state, we could say that after $\Delta t$, the particle at $\mathbf{x}_{P}$ will arrive at point $\mathbf{x}_{G}$
-$$
-\mathbf{x}_{P} = \mathbf{x}_{G} - \Delta t \mathbf{u}_{G}
-$$
+
+$$\mathbf{x}_{P} = \mathbf{x}_{G} - \Delta t \mathbf{u}_{G}$$
+
 then we could update the state and say that the particle at $\mathbf{x}_{G}$ at $t+\Delta t$ has value $q_{P}^{n}$. If the point $\mathbf{x}_{P}$ is not on the grid, we could interpolate it from $q^{n}$ at nearby grid points.
 
 Putting all together, the simplest semi-Lagrangian formula is
-$$
-q_{g}^{n+1} = \textsf{intpolate}(q^{n}, \mathbf{x}_{G}-\Delta t\mathbf{u}_{G})
-$$
+$$q_{g}^{n+1} = \textsf{intpolate}(q^{n}, \mathbf{x}_{G}-\Delta t\mathbf{u}_{G})$$
 
 ##### Body Force
 
@@ -68,14 +66,13 @@ $$\begin{aligned}
 However the pressure we use in the `project` routine must make $\mathbf{u}^{n+1}$ divergence-free and satisfies the boundary conditions. We will see later this turns out to be a liner system on $p$ with constraints.
 
 Now we can formulate the `project` step. Plug $\mathbf{u}^{n+1} = \mathbf{u} - \Delta t \frac{1}{\rho}\nabla p$ into $\nabla \cdot\mathbf{u}^{n+1} = 0$, we have
-$$\nabla \cdot\left( \mathbf{u} - \Delta t \frac{1}{\rho} \nabla p \right) = 0
-\iff \frac{\Delta t}{\rho} \nabla^{2} p = \nabla \cdot \mathbf{u}$$
+
+$$\nabla \cdot\left( \mathbf{u} - \Delta t \frac{1}{\rho} \nabla p \right) = 0 \iff \frac{\Delta t}{\rho} \nabla^{2} p = \nabla \cdot \mathbf{u}$$
+
 which is a Poisson equation. We need to solve it with boundary conditions on $p$.
 
 The Laplacian operator on cell $(i,j)$ is 
-$$
-\color{red}{-} \color{black}\frac{4 p_{i, j}-p_{i+1, j}-p_{i, j+1}-p_{i-1, j}-p_{i, j-1}}{\Delta x^2}
-$$
+$$\color{red}{-} \color{black}\frac{4 p_{i, j}-p_{i+1, j}-p_{i, j+1}-p_{i-1, j}-p_{i, j-1}}{\Delta x^2}$$
 
 ##### Boundary Conditions
 
@@ -131,6 +128,7 @@ A basic fluid algorithm is as following:
 #### Initialization
 
 We are going to fully leverage the grid below:
+
 ![](res/Grid_annotated.png)
 
 It has $4\times 4$ quads, $5 \times 5$ vertices, $4 \times 5$ horizontal edges and $5 \times 4$ vertical edges.
@@ -138,6 +136,7 @@ It has $4\times 4$ quads, $5 \times 5$ vertices, $4 \times 5$ horizontal edges a
 #### Data Structure
 
 ![](res/Grid_Fluid.png)
+
 Let `Res_x` and `Res_y` be the number of squares in a row and number squares in a column.  Then quantity $q$ has dimension `(res_x, res_y)` while velocity field $u$ has dimension `(res_x+1, res_y)` and velocity field $v$ has dimension `(res_x, res_y+1)`.
 
 ```python
