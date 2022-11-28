@@ -7,7 +7,7 @@ from utils import (bilerp,
                    compute_vorticity)
 import numpy as np
 
-ti.init(arch=ti.cuda)
+ti.init(arch=ti.vulkan)
 
 @ti.data_oriented
 class Plume2d():
@@ -131,6 +131,7 @@ class Plume2d():
                 last_y_velocity = (self.v[x, y] + self.v[x-1, y] + self.v[x-1, y+1] + self.v[x, y+1]) / 4
 
                 # Last position of the particle (in grid coordinates, that's why divided by dx)
+                
                 last_x = forward_euler_step(y_0=x*self.dx, slope=last_x_velocity, dt=-self.dt) / self.dx
                 last_y = forward_euler_step(y_0=y*self.dx, slope=last_y_velocity, dt=-self.dt) / self.dx
 
