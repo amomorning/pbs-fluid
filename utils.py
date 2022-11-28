@@ -42,9 +42,9 @@ def field_multiply(field: ti.template(), scalar: float):
         field[I] *= scalar
 
 @ti.func
-def field_divide(field: ti.template(), scalr: float):
-    assert scalr != 0, "Divided by zero"
-    field_multiply(field, 1/scalr)
+def field_divide(field: ti.template(), scalar: float):
+    assert scalar != 0, "Divided by zero"
+    field_multiply(field, 1/scalar)
 
 @ti.func
 def forward_euler_step(y_0: float, slope: float, dt: float) -> float:
@@ -92,12 +92,12 @@ def build_plane_mesh(V: ti.template(), F: ti.template(), res_x: int, res_y: int,
 @ti.kernel
 def get_plane_colors(C: ti.template(), q: ti.template(), res_x: int, res_y: int):
     # Get per-vertex color using interpolation
-    cmin = 0
-    cmax = q[0,0]
+    cmin = q[0,0]
+    cmax = cmin
 
     for y in range(res_y + 1):
         for x in range(res_x + 1):
-        # Clamping
+            # Clamping
             x0 = max(x - 1, 0)
             x1 = min(x, res_x - 1)
             y0 = max(y - 1, 0)
@@ -108,11 +108,14 @@ def get_plane_colors(C: ti.template(), q: ti.template(), res_x: int, res_y: int)
             if c < cmin: cmin = c
             if c > cmax: cmax = c
 
-    grey = [0.2, 0.05, 0.05]
-    cyan = [0.3, 0.95, 0.95]
+    # cmax = 1
+    # cmin = 0
+
+    color1 = [0, 0, 0]
+    color2 = [1, 1, 1]
 
     for i in C:
-        r = (C[i].x - cmin) / (cmax - cmin) * (cyan[0] - grey[0]) + grey[0]
-        g = (C[i].y - cmin) / (cmax - cmin) * (cyan[1] - grey[1]) + grey[1]
-        b = (C[i].z - cmin) / (cmax - cmin) * (cyan[2] - grey[2]) + grey[2]
+        r = (C[i].x - cmin) / (cmax - cmin) * (color2[0] - color1[0]) + color1[0]
+        g = (C[i].y - cmin) / (cmax - cmin) * (color2[1] - color1[1]) + color1[1]
+        b = (C[i].z - cmin) / (cmax - cmin) * (color2[2] - color1[2]) + color1[2]
         C[i].xyz = r, g, b    

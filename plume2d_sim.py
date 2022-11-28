@@ -41,9 +41,9 @@ scene = ti.ui.Scene()
 camera = ti.ui.Camera()
 
 while window.running:
-    if plume.t_curr > 200:
-        # Reset
-        plume.reset()
+    # if plume.t_curr > 200:
+    #     # Reset
+    #     plume.reset()
 
     plume.substep()
     get_plane_colors(C, plume.density, res_x, res_y)
@@ -53,7 +53,7 @@ while window.running:
     scene.set_camera(camera)
 
     # scene.point_light(pos=(0, 1, 2), color=(1, 1, 1))
-    scene.ambient_light((0.5, 0.5, 0.5))
+    scene.ambient_light((1, 1, 1))
     scene.mesh(vertices=V,
                indices=F,
                per_vertex_color=C,
