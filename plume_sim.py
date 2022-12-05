@@ -1,9 +1,6 @@
 import taichi as ti
-from utils import (
-    build_plane_mesh,
-    get_plane_colors
-)
 from Plume2d import Plume2d
+from Renderer import Renderer
 
 ti.init(arch=ti.cuda)
 
@@ -24,16 +21,14 @@ args = {
 }
 
 plume = Plume2d(args)
+plume.MAC_on = True
 # plume.wind_on = True
+# plume.dt /= 2
+# plume.reflection = True
 
 # For rendering
-num_vertices = (res_x+1) * (res_y+1)
-num_triangles = 2*res_x*res_y
-V = ti.Vector.field(3, dtype=float, shape=num_vertices)
-F = ti.field(int, shape=num_triangles * 3)
-C = ti.Vector.field(3, dtype=float, shape=num_vertices)
+renderer = Renderer(res_x, res_y, dx)
 
-build_plane_mesh(V, F, res_x, res_y, dx)
 
 window = ti.ui.Window("Plume 2d", (1024, 1024),
                       vsync=True)
@@ -49,21 +44,23 @@ while window.running:
     #     # Reset
     #     plume.reset()
 
-    for _ in range(substeps):
-        plume.substep()
-    get_plane_colors(C, plume.density, res_x, res_y)
+    # for _ in range(substeps):
+    plume.substep()
+    renderer.render(plume.density, ti.Vector([0,0,0]), ti.Vector([1,1,1]))
 
     camera.position(plume.res_x / 2, plume.res_y / 2, 240)
     camera.lookat(plume.res_x / 2, plume.res_y / 2, 0)
     scene.set_camera(camera)
 
-    # scene.point_light(pos=(0, 1, 2), color=(1, 1, 1))
     scene.ambient_light((1, 1, 1))
-    scene.mesh(vertices=V,
-               indices=F,
-               per_vertex_color=C,
+    scene.mesh(vertices=renderer.V,
+               indices=renderer.F,
+               per_vertex_color=renderer.C,
             #    show_wireframe=True
                )
 
     canvas.scene(scene)
+    
+    # if plume.n_steps % 100 == 0:
+    #     window.save_image(f"./output/frame{plume.n_steps % 100}.png")
     window.show()
