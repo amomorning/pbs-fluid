@@ -53,9 +53,9 @@ class Renderer():
     @ti.kernel
     def get_color_scaled(self, cmin: float, cmax: float, c1: ti.types.vector(3, float), c2: ti.types.vector(3, float)):
         for i in self.C:
-            r = (self.C[i].x - cmin) / (cmax - cmin) * (c2[0] - c1[0]) + c1[0]
-            g = (self.C[i].y - cmin) / (cmax - cmin) * (c2[1] - c1[1]) + c1[1]
-            b = (self.C[i].z - cmin) / (cmax - cmin) * (c2[2] - c1[2]) + c1[2]
+            r = abs((self.C[i].x - cmin) / (cmax - cmin) * (c2[0] - c1[0]) + c1[0])
+            g = abs((self.C[i].y - cmin) / (cmax - cmin) * (c2[1] - c1[1]) + c1[1])
+            b = abs((self.C[i].z - cmin) / (cmax - cmin) * (c2[2] - c1[2]) + c1[2])
             self.C[i].xyz = r, g, b    
 
     def render(self, q: ti.template(), c1: ti.types.vector(3, float), c2: ti.types.vector(3, float)):

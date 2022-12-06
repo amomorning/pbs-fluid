@@ -1,19 +1,15 @@
 import taichi as ti
-import numpy as np
 from utils import (bilerp, 
                    copy_field,
                    compute_divergence,
                    compute_vorticity)
 
 @ti.data_oriented
-class Plume2d():
+class Fluid2d():
 
     def __init__(self, args):
         # Control flag
-        self.wind_on = False
-        self.MAC_on = False
-        self.velocity_on = False
-        self.reflection = False
+        self.wind_on = args['wind_on']
 
         # Discretization parameter
         self.res_x = args['res_x']             # Width
@@ -29,8 +25,6 @@ class Plume2d():
         # Grid, offset=(0.5, 0.5)
         self.density = ti.field(float, shape=(self.res_x, self.res_y))
         self.density_tmp = ti.field(float, shape=(self.res_x, self.res_y))
-        self.density_forward = ti.field(float, shape=(self.res_x, self.res_y)) # For mc-advection
-        self.density_backward = ti.field(float, shape=(self.res_x, self.res_y)) # For mc-advection
         self.pressure = ti.field(float, shape=(self.res_x, self.res_y))
         self.divergence = ti.field(float, shape=(self.res_x, self.res_y))
         self.vorticity = ti.field(float, shape=(self.res_x, self.res_y))
@@ -38,16 +32,12 @@ class Plume2d():
         # MAC grid, offset=(0, 0.5)
         self.u = ti.field(float, shape=(self.res_x+1, self.res_y))
         self.u_tmp = ti.field(float, shape=(self.res_x+1, self.res_y))
-        self.u_forward = ti.field(float, shape=(self.res_x+1, self.res_y)) # For mc-advection
-        self.u_backward = ti.field(float, shape=(self.res_x+1, self.res_y)) # For mc-advection
         self.f_x = ti.field(float, shape=(self.res_x+1, self.res_y))
         
 
         # MAC grid, offset=(0.5, 0)
         self.v = ti.field(float, shape=(self.res_x, self.res_y+1))
         self.v_tmp = ti.field(float, shape=(self.res_x, self.res_y+1))
-        self.v_forward = ti.field(float, shape=(self.res_x, self.res_y+1)) # For mc-advection
-        self.v_backward = ti.field(float, shape=(self.res_x, self.res_y+1)) # For mc-advection
         self.f_y = ti.field(float, shape=(self.res_x, self.res_y+1))
 
         # Indicate if solid, 0 if solid, 1 if fluid
@@ -64,7 +54,7 @@ class Plume2d():
         print("Grid size: {}".format(self.dx))
         print("Time step: {}".format(self.dt))
         print("Wind: {}".format(self.wind_on))
-        print("Advection method: {}".format("MacCormack" if self.MAC_on else "SL"))
+        print("Advection method: {}".format("SL"))
         print("\n\n")
 
     @ti.kernel
@@ -112,19 +102,6 @@ class Plume2d():
 
         return bilerp(x_weight, y_weight, q[ix, iy], q[ix+1, iy], q[ix, iy+1], q[ix+1, iy+1])
 
-    # @ti.kernel
-    # def init_solid(self):
-    #     self.solid.fill(1)
-
-    #     ixmin = int(0.45 * self.res_x)
-    #     ixmax = int(0.55 * self.res_x)
-    #     iymin = int(0.45 * self.res_y)
-    #     iymax = int(0.55 * self.res_y)
-
-    #     for x in range(ixmin, ixmax):
-    #         for y in range(iymin, iymax):
-    #             self.solid[x, y] = 0
-
     @ti.kernel
     def copy_to(self, tmp: ti.template(), v: ti.template()):
         copy_field(tmp, v)
@@ -145,30 +122,6 @@ class Plume2d():
                 q_tmp[ix, iy] = self.get_value(q, x_last, y_last)
 
         copy_field(q_tmp, q)
-
-    @ti.kernel
-    def MC_correct(self, q: ti.template(), q_tmp: ti.template(), q_forward: ti.template(), q_backward: ti.template()):
-        qmin = 1e-10
-        qmax = 1e10
-        for x, y in q:
-            q_tmp[x, y] = q_forward[x, y] - 0.5 * (q_backward[x, y] - q[x, y])
-            # Clamping will make the smoke not symmetric
-            # if q_tmp[x, y] < qmin:
-            #     q_tmp[x, y] = qmin
-            # if q_tmp[x, y] > qmax:
-            #     q_tmp[x, y] = qmax
-        
-        copy_field(q_tmp, q)
-    
-    def advect_MC(self, q: ti.template(), q_tmp: ti.template(), q_forward: ti.template(), q_backward: ti.template(), u: ti.template(), v: ti.template()):
-        self.copy_to(q, q_forward)
-        self.copy_to(q, q_backward)
-        self.advect_SL(q_forward, q_tmp, u, v)
-        self.dt *= -1
-        self.advect_SL(q_backward, q_tmp, u, v)
-        self.dt *= -1
-
-        self.MC_correct(q, q_tmp, q_forward, q_backward)
 
     @ti.kernel
     def add_buoyancy(self):
@@ -255,8 +208,24 @@ class Plume2d():
                 for x in range(0, self.res_x):
                     b = -self.divergence[x, y] / self.dt * rho
                     # Update in place
-                    # self.set_pressure(x, y, dx2 * b)
-                    self.pressure[x,y] = (dx2 * b + self.pressure[x-1, y] + self.pressure[x+1, y] + self.pressure[x, y-1] + self.pressure[x, y+1]) / 4
+                    # if else is fairly slow in taichi
+                    # numerator = dx2 * b
+                    # denominator = 0
+                    # if x > 0:
+                    #     numerator += self.pressure[x-1, y]
+                    #     denominator += 1
+                    # if x < self.res_x-  1:
+                    #     numerator += self.pressure[x+1, y]
+                    #     denominator += 1
+                    # if y > 0:
+                    #     numerator += self.pressure[x, y-1]
+                    #     denominator += 1
+                    # if y < self.res_y - 1:
+                    #     numerator += self.pressure[x, y+1]
+                    #     denominator += 1
+                    # self.pressure[x,y] = numerator / denominator
+                    denominator = self.pressure[x-1, y]/self.pressure[x-1, y] + self.pressure[x+1, y]/self.pressure[x+1, y] + self.pressure[x, y-1]/self.pressure[x, y-1] + self.pressure[x, y+1]/self.pressure[x, y+1]
+                    self.pressure[x,y] = (dx2 * b + self.pressure[x-1, y] + self.pressure[x+1, y] + self.pressure[x, y-1] + self.pressure[x, y+1]) / denominator
 
             # Compute the new residual, i.e. the sum of the squares of the individual residuals (squared L2-norm)
             residual = 0
@@ -299,14 +268,6 @@ class Plume2d():
         self.n_steps = 0
         self.apply_init()
 
-    @ti.kernel
-    def reflect(self):
-        for x, y in self.u_tmp:
-            self.u_tmp[x, y] = 2 * self.u[x, y] - self.u_tmp[x, y]
-        
-        for x, y in self.v_tmp:
-            self.v_tmp[x, y] = 2 * self.v[x, y] - self.v_tmp[x ,y]
-
     def apply_init(self):
         self.apply_source(self.density, 0.45, 0.55, 0.10, 0.15, 1)
         self.apply_source(self.v, 0.45, 0.55, 0.10, 0.14, 1)
@@ -332,40 +293,15 @@ class Plume2d():
         compute_vorticity(self.vorticity, self.u, self.v, self.dx)
 
     def substep(self):
-        if self.reflection:
-            self.apply_init()
-            self.projection()
-            self.reflect()
-            self.advect_SL(self.u_tmp, self.u_tmp, self.u, self.v)
-            self.advect_SL(self.v_tmp, self.v_tmp, self.u, self.v)
-            self.advect_SL(self.density, self.density_tmp, self.u, self.v)
-            self.copy_to(self.u_tmp, self.u)
-            self.copy_to(self.v_tmp, self.v)
-            self.body_force()
-            self.projection()
-            self.advect_SL(self.density, self.density_tmp, self.u, self.v)
-            self.advect_SL(self.u, self.u_tmp, self.u, self.v)
-            self.advect_SL(self.v, self.v_tmp, self.u, self.v)
-            self.body_force()
-            self.f_x.fill(0)
-            self.f_y.fill(0)
-            self.t_curr += 2*self.dt
-            self.n_steps += 1
-        else:
-            self.apply_init()
-            self.body_force()
-            self.projection()
-            if self.MAC_on:
-                self.advect_MC(self.density, self.density_tmp, self.density_forward, self.density_forward, self.u, self.v)
-                self.advect_MC(self.u, self.u_tmp, self.u_forward, self.u_backward, self.u, self.v)
-                self.advect_MC(self.v, self.v_tmp, self.v_forward, self.v_backward, self.u, self.v)
-            else:
-                self.advect_SL(self.density, self.density_tmp, self.u, self.v)
-                self.advect_SL(self.u, self.u_tmp, self.u, self.v)
-                self.advect_SL(self.v, self.v_tmp, self.u, self.v)
-            self.f_x.fill(0)
-            self.f_y.fill(0)
-            self.t_curr += self.dt
-            self.n_steps += 1
+        self.apply_init()
+        self.body_force()
+        self.projection()
+        self.advect_SL(self.density, self.density_tmp, self.u, self.v)
+        self.advect_SL(self.u, self.u_tmp, self.u, self.v)
+        self.advect_SL(self.v, self.v_tmp, self.u, self.v)
+        self.f_x.fill(0)
+        self.f_y.fill(0)
+        self.t_curr += self.dt
+        self.n_steps += 1
         
     
