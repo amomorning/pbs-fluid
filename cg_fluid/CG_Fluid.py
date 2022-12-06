@@ -2,7 +2,7 @@ import taichi as ti
 import Util
 
 
-ti.init(arch=ti.cuda)
+ti.init(arch=ti.gpu)
 
 # General settings:
 resolutionX = 512
