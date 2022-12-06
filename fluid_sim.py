@@ -51,11 +51,11 @@ while window.running:
         plume.substep()
 
     if render_density:
-        renderer.render(plume.density, ti.Vector([1,1,1]), ti.Vector([0,0,0]))
+        renderer.render(plume.density.q, ti.Vector([1,1,1]), ti.Vector([0,0,0]))
     elif render_divergence:
-        renderer.render(plume.divergence, ti.Vector([1,1,1]), ti.Vector([0,0,0]))
+        renderer.render(plume.divergence.q, ti.Vector([1,1,1]), ti.Vector([0,0,0]))
     elif render_voritcity:
-        renderer.render(plume.vorticity, ti.Vector([1,1,1]), ti.Vector([0,0,0]))
+        renderer.render(plume.vorticity.q, ti.Vector([1,1,1]), ti.Vector([0,0,0]))
 
     camera.position(plume.res_x / 2, plume.res_y / 2, 240)
     camera.lookat(plume.res_x / 2, plume.res_y / 2, 0)

@@ -14,6 +14,10 @@ def bilerp(x_weight, y_weight, x00, x10, x01, x11):
     """
     return lerp(lerp(x00, x10, x_weight), lerp(x01, x11, x_weight), y_weight)
 
+@ti.func
+def euler(y0, vel, dt):
+    return y0 + vel * dt
+
 # Compute the divergence for a velocity field 
 @ti.kernel
 def compute_divergence(divergence: ti.template(), u: ti.template(), v: ti.template(), dx: float):
@@ -62,3 +66,15 @@ def swap_field(f1: ti.template(), f2: ti.template()):
         f1[I] = f2[I]
         f2[I] = tmp
     
+@ti.func
+def get_value(q: ti.template(), x, y, ox, oy):
+    # Clmap and project to bot-left corner
+    fx = min(max(x - ox, 0.0), q.shape[0] - 1.001)
+    fy = min(max(y - oy, 0.0), q.shape[1] - 1.001)
+    ix = int(fx)
+    iy = int(fy)
+
+    x_weight = fx - ix
+    y_weight = fy - iy
+
+    return bilerp(x_weight, y_weight, q[ix, iy], q[ix+1, iy], q[ix, iy+1], q[ix+1, iy+1])
