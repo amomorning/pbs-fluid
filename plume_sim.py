@@ -10,6 +10,11 @@ dx = 1
 dt = 0.005 * ti.sqrt((res_x + res_y) * 0.5)
 accuracy = 1e-4
 n_iters = 100
+advection = "MAC"
+interpolation = "cerp"
+integration = "rk3"
+solver = "GS"
+reflecton = False
 
 args = {
     'res_x': res_x,
@@ -17,7 +22,12 @@ args = {
     'dx': dx,
     'dt': dt,
     'accuracy': accuracy,
-    'poisson_iters': n_iters
+    'poisson_iters': n_iters,
+    'advection': advection,         # SL, MAC, FLIP
+    'interpolation': interpolation,    # bilerp, cerp
+    'integration': integration,        # euler, rk3
+    'solver': solver,
+    'reflection': reflecton
 }
 
 plume = Plume2d(args)
@@ -37,18 +47,19 @@ canvas.set_background_color((0, 0, 0))
 scene = ti.ui.Scene()
 camera = ti.ui.Camera()
 
-substeps = 1
+substeps = 20
+frame = 0
 
 while window.running:
     # if plume.t_curr > 200:
     #     # Reset
     #     plume.reset()
 
-    # for _ in range(substeps):
-    plume.substep()
+    for _ in range(substeps):
+        plume.substep()
     renderer.render(plume.density, ti.Vector([0,0,0]), ti.Vector([1,1,1]))
 
-    camera.position(plume.res_x / 2, plume.res_y / 2, 240)
+    camera.position(plume.res_x / 2, plume.res_y / 2, 300)
     camera.lookat(plume.res_x / 2, plume.res_y / 2, 0)
     scene.set_camera(camera)
 
@@ -61,6 +72,7 @@ while window.running:
 
     canvas.scene(scene)
     
-    # if plume.n_steps % 100 == 0:
-    #     window.save_image(f"./output/frame{plume.n_steps % 100}.png")
+    window.save_image(f"./output/{advection}_{interpolation}_{integration}_{solver}_{reflecton}_{frame:05d}.png")
     window.show()
+
+    frame += 1

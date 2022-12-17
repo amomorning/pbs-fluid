@@ -2,10 +2,12 @@ import taichi as ti
 import numpy as np
 from MICPCGSolver import MICPCGSolver
 from utils import (bilerp, 
+                   cerp,
                    copy_field,
                    compute_divergence,
                    compute_vorticity,
-                   cerp)
+                   euler,
+                   rk3)
 
 @ti.data_oriented
 class Plume2d():
@@ -15,7 +17,11 @@ class Plume2d():
         self.wind_on = False
         self.MAC_on = True
         self.velocity_on = False
-        self.reflection = False
+        self.reflection = args['reflection']
+        self.advection = args['advection']               # SL, MAC, FLIP
+        self.interpolation = args['interpolation']       # bilerp, cerp
+        self.integration = args['integration']           # euler, rk3
+        self.solver = args['solver']                     # GS, CG, MIC
 
         # Discretization parameter
         self.res_x = args['res_x']             # Width
@@ -23,9 +29,9 @@ class Plume2d():
         self.dx = args['dx']                   # Square size
         self.dt = args['dt']                   # Time discretization
         self.acc = args['accuracy']            # Poisson equation accuracy
-        self.max_iters = args['poisson_iters']   # For solving the Poisson equation
-        self.t_curr = 0
-        self.n_steps = 0
+        self.max_iters = args['poisson_iters'] # For solving the Poisson equation
+        self.t_curr = 0                        # Current time
+        self.n_steps = 0                       # Current step
 
         self.preconditioning = True
 
@@ -75,6 +81,24 @@ class Plume2d():
         self.print_info()
         self.reset()
 
+        # Init by scheme
+        if self.reflection:
+            self.dt /= 2
+        
+        self.get_value = self.get_value_bilerp
+        if self.interpolation == "cerp":
+            self.get_value = self.get_value_cerp
+
+        self.advect_SL = self.advect_SL_euler
+        if self.integration == "rk3":
+            self.advect_SL = self.advect_SL_rk3
+
+        self.solve_poisson = self.solve_poisson_GS
+        if self.solver == "CG":
+            self.solve_poisson = self.solve_poisson_CG
+        elif self.solver == "MIC":
+            self.solve_poisson = self.solve_poisson_MIC
+
     def print_info(self):
         print("Plume simulator starts")
         print("Parameters:")
@@ -82,7 +106,11 @@ class Plume2d():
         print("Grid size: {}".format(self.dx))
         print("Time step: {}".format(self.dt))
         print("Wind: {}".format(self.wind_on))
-        print("Advection method: {}".format("MacCormack" if self.MAC_on else "SL"))
+        print("Advection scheme: {}".format(self.advection))
+        print("Interpolation scheme: {}".format(self.interpolation))
+        print("Integration scheme: {}".format(self.integration))
+        print("Solver: {}".format(self.solver))
+        print("Reflection: {}".format(self.reflection))
         print("\n\n")
 
     @ti.kernel
@@ -113,7 +141,7 @@ class Plume2d():
 
     # Find the value of a field at arbitrary point
     @ti.func
-    def get_value(self, q: ti.template(), x: float, y: float) -> float:
+    def get_value_bilerp(self, q: ti.template(), x: float, y: float) -> float:
         ox, oy = self.get_offset(q)
 
         sx = q.shape[0]
@@ -129,43 +157,9 @@ class Plume2d():
         y_weight = fy - iy
 
         return bilerp(x_weight, y_weight, q[ix, iy], q[ix+1, iy], q[ix, iy+1], q[ix+1, iy+1])
-
-    # @ti.kernel
-    # def init_solid(self):
-    #     self.solid.fill(1)
-
-    #     ixmin = int(0.45 * self.res_x)
-    #     ixmax = int(0.55 * self.res_x)
-    #     iymin = int(0.45 * self.res_y)
-    #     iymax = int(0.55 * self.res_y)
-
-    #     for x in range(ixmin, ixmax):
-    #         for y in range(iymin, iymax):
-    #             self.solid[x, y] = 0
-
-    @ti.kernel
-    def copy_to(self, tmp: ti.template(), v: ti.template()):
-        copy_field(tmp, v)
-
-    @ti.kernel
-    def advect_SL(self, q: ti.template(), q_tmp: ti.template() ,u: ti.template(), v: ti.template()):
-        ox, oy = self.get_offset(q)
-        for iy in range(q.shape[1]):
-            for ix in range(q.shape[0]):
-                # Current position
-                x = ix + ox
-                y = iy + oy
-
-                # Last position
-                x_last = x - self.get_value(u, x, y) / self.dx * self.dt
-                y_last = y - self.get_value(v, x, y) / self.dx * self.dt
-
-                q_tmp[ix, iy] = self.get_value(q, x_last, y_last)
-
-        copy_field(q_tmp, q)
-
+    
     @ti.func
-    def at_cerp(self,q: ti.template(), x: float, y: float):
+    def get_value_cerp(self,q: ti.template(), x: float, y: float):
         # Clmap and project to bot-left corner
         ox, oy = self.get_offset(q)
         sx = q.shape[0]
@@ -196,10 +190,46 @@ class Plume2d():
         q3 = cerp(q[x0,y3], q[x1,y3], q[x2,y3],q[x3,y3], x_weight)
 
         return cerp(q0,q1,q2,q3,y_weight)
+
+    # @ti.kernel
+    # def init_solid(self):
+    #     self.solid.fill(1)
+
+    #     ixmin = int(0.45 * self.res_x)
+    #     ixmax = int(0.55 * self.res_x)
+    #     iymin = int(0.45 * self.res_y)
+    #     iymax = int(0.55 * self.res_y)
+
+    #     for x in range(ixmin, ixmax):
+    #         for y in range(iymin, iymax):
+    #             self.solid[x, y] = 0
+
+    @ti.kernel
+    def copy_to(self, tmp: ti.template(), v: ti.template()):
+        copy_field(tmp, v)
+
+    @ti.kernel
+    def advect_SL_euler(self, q: ti.template(), q_tmp: ti.template() ,u: ti.template(), v: ti.template()):
+        ox, oy = self.get_offset(q)
+        for iy in range(q.shape[1]):
+            for ix in range(q.shape[0]):
+                # Current position
+                x = ix + ox
+                y = iy + oy
+
+                # Last position
+                x_last = euler(x, self.get_value(u, x, y) / self.dx, -self.dt)
+                y_last = euler(y, self.get_value(v, x, y) / self.dx, -self.dt)
+
+                q_tmp[ix, iy] = self.get_value(q, x_last, y_last)
+
+        copy_field(q_tmp, q)
+
+    
     
     
     @ti.kernel
-    def advect_SL_RK3(self,q: ti.template(), q_tmp: ti.template() , u: ti.template(), v: ti.template()):
+    def advect_SL_rk3(self,q: ti.template(), q_tmp: ti.template() , u: ti.template(), v: ti.template()):
         ox, oy = self.get_offset(q)
         for iy in range(q.shape[1]):
             for ix in range(q.shape[0]):
@@ -224,7 +254,10 @@ class Plume2d():
                 x_last = x - self.dt * ((2.0/9.0) * firstU + (1.0 / 3.0) * midU + (4.0 / 9.0) * lastU)
                 y_last = y - self.dt * ((2.0/9.0) * firstV + (1.0 / 3.0) * midV + (4.0 / 9.0) * lastV)
 
-                q_tmp[ix,iy] = self.at_cerp(q,x_last,y_last) #self.at(x_last,y_last) 
+                x_last = rk3(x, firstU, midU, lastU, -self.dt)
+                y_last = rk3(y, firstV, midV, lastV, -self.dt)
+
+                q_tmp[ix,iy] = self.get_value(q,x_last,y_last) #self.at(x_last,y_last) 
 
         copy_field(q_tmp, q)
 
@@ -246,9 +279,9 @@ class Plume2d():
     def advect_MC(self, q: ti.template(), q_tmp: ti.template(), q_forward: ti.template(), q_backward: ti.template(), u: ti.template(), v: ti.template()):
         self.copy_to(q, q_forward)
         self.copy_to(q, q_backward)
-        self.advect_SL_RK3(q_forward, q_tmp, u, v)
+        self.advect_SL(q_forward, q_tmp, u, v)
         self.dt *= -1
-        self.advect_SL_RK3(q_backward, q_tmp, u, v)
+        self.advect_SL(q_backward, q_tmp, u, v)
         self.dt *= -1
 
         self.MC_correct(q, q_tmp, q_forward, q_backward)
@@ -263,7 +296,7 @@ class Plume2d():
 
         for i in range(self.f_y.shape[0]):
             for j in range(1, self.f_y.shape[1]-1):
-                self.f_y[i, j] += 0.01 * (self.density[i, j-1] + self.density[i,j]) / 2 * scaling
+                self.f_y[i, j] += 0.1 * (self.density[i, j-1] + self.density[i,j]) / 2 * scaling
 
     @ti.kernel
     def add_wind(self):
@@ -324,7 +357,7 @@ class Plume2d():
     #         self.pressure[x, y] = numerator / denominator
 
     @ti.kernel
-    def solve_poisson(self):
+    def solve_poisson_GS(self):
         """
         Solve the Poisson equation for pressure using Gauss-Siedel method.
         """
@@ -515,6 +548,19 @@ class Plume2d():
             self.add_wind()
 
         self.apply_force()
+        self.set_zero()
+
+    def advect(self):
+        if self.advection == "MAC":
+            self.advect_MC(self.density, self.density_tmp, self.density_forward, self.density_forward, self.u, self.v)
+            self.advect_MC(self.u, self.u_tmp, self.u_forward, self.u_backward, self.u, self.v)
+            self.advect_MC(self.v, self.v_tmp, self.v_forward, self.v_backward, self.u, self.v)
+        elif self.advection == "FLIP":
+            pass
+        else:
+            self.advect_SL(self.density, self.density_tmp, self.u, self.v)
+            self.advect_SL(self.u, self.u_tmp, self.u, self.v)
+            self.advect_SL(self.v, self.v_tmp, self.u, self.v)
 
     def projection(self):
         # Prepare the Poisson equation (r.h.s)
@@ -522,14 +568,7 @@ class Plume2d():
 
         # Projection step
 
-        # 1.
         self.solve_poisson()
-
-        # 2.
-        # self.solve_poisson_CG()
-
-        # 3.
-        # self.solve_poisson_MIC()
 
         self.correct_velocity()
 
@@ -543,16 +582,10 @@ class Plume2d():
             self.apply_init()
             self.projection()
             self.reflect()
-            self.advect_MC(self.density, self.density_tmp, self.density_forward, self.density_forward, self.u, self.v)
-            self.advect_MC(self.u, self.u_tmp, self.u_forward, self.u_backward, self.u, self.v)
-            self.advect_MC(self.v, self.v_tmp, self.v_forward, self.v_backward, self.u, self.v)
-            self.copy_to(self.u_tmp, self.u)
-            self.copy_to(self.v_tmp, self.v)
+            self.advect()
             self.body_force()
             self.projection()
-            self.advect_MC(self.density, self.density_tmp, self.density_forward, self.density_forward, self.u, self.v)
-            self.advect_MC(self.u, self.u_tmp, self.u_forward, self.u_backward, self.u, self.v)
-            self.advect_MC(self.v, self.v_tmp, self.v_forward, self.v_backward, self.u, self.v)
+            self.advect()
             self.body_force()
             self.f_x.fill(0)
             self.f_y.fill(0)
@@ -562,14 +595,7 @@ class Plume2d():
             self.apply_init()
             self.body_force()
             self.projection()
-            if self.MAC_on:
-                self.advect_MC(self.density, self.density_tmp, self.density_forward, self.density_forward, self.u, self.v)
-                self.advect_MC(self.u, self.u_tmp, self.u_forward, self.u_backward, self.u, self.v)
-                self.advect_MC(self.v, self.v_tmp, self.v_forward, self.v_backward, self.u, self.v)
-            else:
-                self.advect_SL_RK3(self.density, self.density_tmp, self.u, self.v)
-                self.advect_SL_RK3(self.u, self.u_tmp, self.u, self.v)
-                self.advect_SL_RK3(self.v, self.v_tmp, self.u, self.v)
+            self.advect()
             self.f_x.fill(0)
             self.f_y.fill(0)
             self.t_curr += self.dt

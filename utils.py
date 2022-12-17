@@ -37,6 +37,10 @@ def cerp(x0, x1, x2, x3, w):
 def euler(y0, vel, dt):
     return y0 + vel * dt
 
+@ti.func 
+def rk3(y0, k1, k2, k3, dt):
+    return y0 + dt * ((2.0/9.0) * k1+ (1.0 / 3.0) * k2+ (4.0 / 9.0) * k3)
+
 # Compute the divergence for a velocity field 
 @ti.kernel
 def compute_divergence(divergence: ti.template(), u: ti.template(), v: ti.template(), dx: float):
@@ -98,6 +102,16 @@ def get_value(q: ti.template(), x, y, ox, oy):
 
     return bilerp(x_weight, y_weight, q[ix, iy], q[ix+1, iy], q[ix, iy+1], q[ix+1, iy+1])
 
+@ti.func
+def get_offset(q: ti.template(), res_x, res_y):
+    ox = 0.5
+    oy = 0.5
+    if q.shape[0] == res_x + 1:
+        ox = 0
+    if q.shape[1] == res_y + 1:
+        oy = 0
+    
+    return ox, oy
 
 # @ti.func
 # def preconditioner(a: ti.template):
