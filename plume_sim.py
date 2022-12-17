@@ -8,8 +8,8 @@ res_x = 128
 res_y = int(res_x * 1)
 dx = 1
 dt = 0.005 * ti.sqrt((res_x + res_y) * 0.5)
-accuracy = 1e-5
-n_iters = 1000
+accuracy = 1e-4
+n_iters = 100
 
 args = {
     'res_x': res_x,
@@ -23,8 +23,8 @@ args = {
 plume = Plume2d(args)
 plume.MAC_on = True
 # plume.wind_on = True
-# plume.dt /= 2
-# plume.reflection = True
+plume.dt /= 2
+plume.reflection = True
 
 # For rendering
 renderer = Renderer(res_x, res_y, dx)
@@ -37,7 +37,7 @@ canvas.set_background_color((0, 0, 0))
 scene = ti.ui.Scene()
 camera = ti.ui.Camera()
 
-substeps = 10
+substeps = 1
 
 while window.running:
     # if plume.t_curr > 200:

@@ -15,6 +15,25 @@ def bilerp(x_weight, y_weight, x00, x10, x01, x11):
     return lerp(lerp(x00, x10, x_weight), lerp(x01, x11, x_weight), y_weight)
 
 @ti.func
+def cerp(x0, x1, x2, x3, w):
+    """
+    Cubic INterpolation
+    """
+    w_sq = w * w
+    w_cu = w_sq * w
+
+    #for clamping
+    minx = min(x0, min(x1, min(x2,x3)))
+    maxx = max(x0, max(x1, max(x2,x3)))
+
+    t = x0 * (0.0 - 0.5 * w + 1.0 * w_sq - 0.5 * w_cu)\
+         + x1 * (1.0 + 0.0 * w - 2.5 * w_sq + 1.5 * w_cu)\
+         + x2 * (0.0 + 0.5 * w + 2.0 * w_sq - 1.5 * w_cu)\
+         + x3 * (0.0 + 0.0 * w - 0.5 * w_sq + 0.5 * w_cu)
+
+    return min(max(t, minx), maxx)
+
+@ti.func
 def euler(y0, vel, dt):
     return y0 + vel * dt
 
@@ -78,3 +97,9 @@ def get_value(q: ti.template(), x, y, ox, oy):
     y_weight = fy - iy
 
     return bilerp(x_weight, y_weight, q[ix, iy], q[ix+1, iy], q[ix, iy+1], q[ix+1, iy+1])
+
+
+# @ti.func
+# def preconditioner(a: ti.template):
+
+

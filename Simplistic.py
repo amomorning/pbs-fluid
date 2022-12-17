@@ -24,6 +24,7 @@ class Fluid2d():
         self.max_iters = args['poisson_iters']   # For solving the Poisson equation
         self.t_curr = 0
         self.n_steps = 0
+        self.MAC_on = True
 
         # Quantities
         # Grid, offset=(0.5, 0.5)
@@ -236,9 +237,15 @@ class Fluid2d():
         # self.advect_SL(self.density, self.density_tmp, self.u, self.v)
         # self.advect_SL(self.u, self.u_tmp, self.u, self.v)
         # self.advect_SL(self.v, self.v_tmp, self.u, self.v)
-        self.density.advect_SL(self.u.q, self.v.q, self.dx, self.dt)
-        self.u.advect_SL(self.u.q, self.v.q, self.dx, self.dt)
-        self.v.advect_SL(self.u.q, self.v.q, self.dx, self.dt)
+        if self.MAC_on:
+            self.density.advect_MC(self.u.q, self.v.q, self.dx, self.dt)
+            self.u.advect_MC(self.u.q, self.v.q, self.dx, self.dt)
+            self.v.advect_MC(self.u.q, self.v.q, self.dx, self.dt)
+        else:
+            self.density.advect_SL_RK3(self.u.q, self.v.q, self.dx, self.dt)
+            self.u.advect_SL_RK3(self.u.q, self.v.q, self.dx, self.dt)
+            self.v.advect_SL_RK3(self.u.q, self.v.q, self.dx, self.dt)
+        
         self.f_x.reset()
         self.f_y.reset()
         self.t_curr += self.dt

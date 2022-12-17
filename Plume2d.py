@@ -1,9 +1,11 @@
 import taichi as ti
 import numpy as np
+from MICPCGSolver import MICPCGSolver
 from utils import (bilerp, 
                    copy_field,
                    compute_divergence,
-                   compute_vorticity)
+                   compute_vorticity,
+                   cerp)
 
 @ti.data_oriented
 class Plume2d():
@@ -11,7 +13,7 @@ class Plume2d():
     def __init__(self, args):
         # Control flag
         self.wind_on = False
-        self.MAC_on = False
+        self.MAC_on = True
         self.velocity_on = False
         self.reflection = False
 
@@ -24,6 +26,8 @@ class Plume2d():
         self.max_iters = args['poisson_iters']   # For solving the Poisson equation
         self.t_curr = 0
         self.n_steps = 0
+
+        self.preconditioning = True
 
         # Quantities
         # Grid, offset=(0.5, 0.5)
@@ -52,6 +56,20 @@ class Plume2d():
 
         # Indicate if solid, 0 if solid, 1 if fluid
         # self.solid = ti.field(float, shape=(self.res_x, self.res_y))
+
+        # settings for Conjugate Gradient method for solving poisson equation
+        self.r = ti.field(float, shape=(self.res_x, self.res_y))
+        self.d = ti.field(float, shape=(self.res_x, self.res_y))
+        self.x = ti.field(float, shape=(self.res_x, self.res_y))
+        self.q = ti.field(float, shape=(self.res_x, self.res_y))
+        self.Ap = ti.field(float, shape=(self.res_x, self.res_y))
+
+        #settings for MICPCG for solving poisson equation
+        self.p_solver = None
+        if(self.preconditioning):
+            celltype  = ti.field(int, shape=(self.res_x, self.res_y))
+            celltype.fill(1)
+            self.p_solver = MICPCGSolver(self.res_x, self.res_y, self.u, self.v, cell_type=celltype, MIC_blending=0.0)
 
         # self.init_solid()
         self.print_info()
@@ -146,6 +164,71 @@ class Plume2d():
 
         copy_field(q_tmp, q)
 
+    @ti.func
+    def at_cerp(self,q: ti.template(), x: float, y: float):
+        # Clmap and project to bot-left corner
+        ox, oy = self.get_offset(q)
+        sx = q.shape[0]
+        sy = q.shape[1]
+
+        fx = min(max(x - ox, 0.0), sx - 1.001)
+        fy = min(max(y - oy, 0.0), sy - 1.001)
+        ix = int(fx)
+        iy = int(fy)
+
+        x_weight = fx - ix
+        y_weight = fy - iy
+        
+        #int index for calculating cerp
+        x0 = max(ix - 1, 0)
+        x1 = ix
+        x2 = ix + 1
+        x3 = min(ix + 2, sx - 1)
+
+        y0 = max(iy - 1, 0)
+        y1 = iy
+        y2 = iy + 1
+        y3 = min(iy + 2, sy - 1)
+
+        q0 = cerp(q[x0,y0], q[x1,y0], q[x2,y0],q[x3,y0], x_weight)
+        q1 = cerp(q[x0,y1], q[x1,y1], q[x2,y1],q[x3,y1], x_weight)
+        q2 = cerp(q[x0,y2], q[x1,y2], q[x2,y2],q[x3,y2], x_weight)
+        q3 = cerp(q[x0,y3], q[x1,y3], q[x2,y3],q[x3,y3], x_weight)
+
+        return cerp(q0,q1,q2,q3,y_weight)
+    
+    
+    @ti.kernel
+    def advect_SL_RK3(self,q: ti.template(), q_tmp: ti.template() , u: ti.template(), v: ti.template()):
+        ox, oy = self.get_offset(q)
+        for iy in range(q.shape[1]):
+            for ix in range(q.shape[0]):
+                x = ix + ox
+                y = iy + oy
+
+                firstU = self.get_value(u, x, y) / self.dx
+                firstV = self.get_value(v, x, y) / self.dx
+
+                midX = x - 0.5 * self.dt * firstU
+                midY = y - 0.5 * self.dt * firstV
+                
+                midU = self.get_value(u, midX, midY) / self.dx
+                midV = self.get_value(v, midX, midY) / self.dx
+
+                lastX = x - 0.75 * self.dt * midU
+                lastY = y - 0.75 * self.dt * midV
+
+                lastU = self.get_value(u, lastX, lastY) / self.dx
+                lastV = self.get_value(v, lastX, lastY) / self.dx
+
+                x_last = x - self.dt * ((2.0/9.0) * firstU + (1.0 / 3.0) * midU + (4.0 / 9.0) * lastU)
+                y_last = y - self.dt * ((2.0/9.0) * firstV + (1.0 / 3.0) * midV + (4.0 / 9.0) * lastV)
+
+                q_tmp[ix,iy] = self.at_cerp(q,x_last,y_last) #self.at(x_last,y_last) 
+
+        copy_field(q_tmp, q)
+
+
     @ti.kernel
     def MC_correct(self, q: ti.template(), q_tmp: ti.template(), q_forward: ti.template(), q_backward: ti.template()):
         qmin = 1e-10
@@ -163,9 +246,9 @@ class Plume2d():
     def advect_MC(self, q: ti.template(), q_tmp: ti.template(), q_forward: ti.template(), q_backward: ti.template(), u: ti.template(), v: ti.template()):
         self.copy_to(q, q_forward)
         self.copy_to(q, q_backward)
-        self.advect_SL(q_forward, q_tmp, u, v)
+        self.advect_SL_RK3(q_forward, q_tmp, u, v)
         self.dt *= -1
-        self.advect_SL(q_backward, q_tmp, u, v)
+        self.advect_SL_RK3(q_backward, q_tmp, u, v)
         self.dt *= -1
 
         self.MC_correct(q, q_tmp, q_forward, q_backward)
@@ -270,7 +353,116 @@ class Plume2d():
             residual /= self.res_x * self.res_y
 
             it += 1
-        # print(f"Poisson residual {residual}, takes {it} iterations")
+        print(f"Poisson residual {residual}, takes {it} iterations")
+
+    
+    @ti.kernel
+    def solve_poisson_CG(self): # trivial jacobian preconditioner
+        dx2 = self.dx * self.dx
+        #residual = self.acc + 1
+        rho = 1 
+        self.x.fill(0)
+        self.q.fill(0)
+        self.r.fill(0)
+        self.d.fill(0)
+
+        for i in range(0, self.res_y): 
+            for j in range(0, self.res_x):
+                r = - 1.0 *  self.divergence[i, j] / self.dt
+                # r =  b(rhs) - Ax
+                r -= (4.0 * self.x[i,j]  - self.x[i-1, j] - self.x[i+1, j] - self.x[i, j-1] - self.x[i, j+1]) / dx2
+
+                self.r[i,j] = r
+                self.d[i,j] = r / 4.0 # self.d = z
+                self.q[i,j] = self.d[i,j]
+
+        delta_new = 0.0
+        for i in range(0, self.res_y): 
+            for j in range(0, self.res_x):
+                delta_new += self.r[i,j] * self.r[i,j]
+        delta_0 =  delta_new
+
+        it = 0
+        beta = 0.0
+        delta_old = 1.0
+        residual = 1.0
+        alpha = 0.0
+
+        self.Ap.fill(0)
+
+        while it < self.max_iters and residual > 1e-4: #self.acc
+            # version2, add jacobian preconditioner
+            delta_new = 0.0
+            
+            # rz_old = r_T * z
+            for i in range(0, self.res_y): 
+                for j in range(0, self.res_x):
+                    delta_new += self.r[i,j] * self.d[i,j]
+            print(f"delta of res {delta_new}")
+            # beta = delta_new/delta_old          
+
+            #  Ad = A.dot(q)
+            for i in range(0, self.res_y): 
+                for j in range(0, self.res_x):
+                    self.Ap[i,j] = 4.0 * self.q[i,j]  - self.q[i-1, j] - self.q[i+1, j] - self.q[i, j-1] - self.q[i, j+1]
+
+            denom_a = 0.0
+            for i in range(0, self.res_y): 
+                for j in range(0, self.res_x):
+                    denom_a += self.q[i,j] * self.Ap[i,j]
+
+            # rz_old / np.dot(np.transpose(d),Ad)
+            alpha = delta_new/denom_a
+
+            for i in range(0, self.res_y): 
+                for j in range(0, self.res_x):
+                    self.x[i,j] += alpha * self.q[i,j]
+
+
+            
+            for i in range(0, self.res_y): 
+                for j in range(0, self.res_x):
+                    self.r[i,j] -= alpha * self.Ap[i,j]
+
+            # z = Minv * r
+            for i in range(0, self.res_y): 
+                for j in range(0, self.res_x):
+                    self.d[i,j] = self.r[i,j] / 4.0
+
+
+            delta_old = delta_new
+            delta_new = 0.0
+            for i in range(0, self.res_y): 
+                for j in range(0, self.res_x):
+                    delta_new += self.r[i,j] * self.d[i,j]
+
+            beta = delta_new/delta_old
+
+            for i in range(0, self.res_y): 
+                for j in range(0, self.res_x):
+                    self.q[i,j] = self.d[i,j] + beta * self.q[i,j]
+
+            residual = 0
+            for y in range(0, self.res_y):
+                for x in range(0, self.res_x):
+                    b = -dx2 * self.divergence[x,y] / self.dt * rho
+                    cell_residual = b - (4 * self.x[x, y] - self.x[x-1, y] - self.x[x+1, y] - self.x[x, y-1] - self.x[x, y+1])  
+                    residual += cell_residual ** 2
+
+            residual = ti.sqrt(residual)
+            residual /= self.res_x * self.res_y
+
+            it += 1
+            print(f"Poisson CG residual {residual}, takes {it} iterations")
+        copy_field(self.x, self.pressure)
+
+    def solve_poisson_MIC(self):
+        scale_A = self.dt / (self.dx * self.dx)
+        scale_b = 1 / self.dx
+        # if(self.preconditioning):
+        self.p_solver.system_init(scale_A, scale_b)
+        self.p_solver.solve(100)
+        self.copy_to(self.p_solver.p, self.pressure)
 
     @ti.kernel
     def correct_velocity(self):
@@ -291,8 +483,12 @@ class Plume2d():
         self.vorticity.fill(0)
         self.u.fill(0)
         self.u_tmp.fill(0)
+        self.u_forward.fill(0)
+        self.u_backward.fill(0)
         self.v.fill(0)
         self.v_tmp.fill(0)
+        self.v_forward.fill(0)
+        self.v_backward.fill(0)
         self.f_x.fill(0)
         self.f_y.fill(0)
         self.t_curr = 0
@@ -308,9 +504,11 @@ class Plume2d():
             self.v_tmp[x, y] = 2 * self.v[x, y] - self.v_tmp[x ,y]
 
     def apply_init(self):
+        # self.apply_source(self.density, 0.45, 0.55, 0.10, 0.15, 1)
+        # self.apply_source(self.v, 0.45, 0.55, 0.10, 0.14, 1)
         self.apply_source(self.density, 0.45, 0.55, 0.10, 0.15, 1)
-        self.apply_source(self.v, 0.45, 0.55, 0.10, 0.14, 1)
-    
+        self.apply_source(self.v, 0.45, 0.55, 0.10, 0.14, 2)
+
     def body_force(self):
         self.add_buoyancy()
         if self.wind_on:
@@ -323,7 +521,16 @@ class Plume2d():
         compute_divergence(self.divergence, self.u, self.v, self.dx)
 
         # Projection step
+
+        # 1.
         self.solve_poisson()
+
+        # 2.
+        # self.solve_poisson_CG()
+
+        # 3.
+        # self.solve_poisson_MIC()
+
         self.correct_velocity()
 
         # Apply velocity boundary condition
@@ -336,16 +543,16 @@ class Plume2d():
             self.apply_init()
             self.projection()
             self.reflect()
-            self.advect_SL(self.u_tmp, self.u_tmp, self.u, self.v)
-            self.advect_SL(self.v_tmp, self.v_tmp, self.u, self.v)
-            self.advect_SL(self.density, self.density_tmp, self.u, self.v)
+            self.advect_MC(self.density, self.density_tmp, self.density_forward, self.density_forward, self.u, self.v)
+            self.advect_MC(self.u, self.u_tmp, self.u_forward, self.u_backward, self.u, self.v)
+            self.advect_MC(self.v, self.v_tmp, self.v_forward, self.v_backward, self.u, self.v)
             self.copy_to(self.u_tmp, self.u)
             self.copy_to(self.v_tmp, self.v)
             self.body_force()
             self.projection()
-            self.advect_SL(self.density, self.density_tmp, self.u, self.v)
-            self.advect_SL(self.u, self.u_tmp, self.u, self.v)
-            self.advect_SL(self.v, self.v_tmp, self.u, self.v)
+            self.advect_MC(self.density, self.density_tmp, self.density_forward, self.density_forward, self.u, self.v)
+            self.advect_MC(self.u, self.u_tmp, self.u_forward, self.u_backward, self.u, self.v)
+            self.advect_MC(self.v, self.v_tmp, self.v_forward, self.v_backward, self.u, self.v)
             self.body_force()
             self.f_x.fill(0)
             self.f_y.fill(0)
@@ -360,9 +567,9 @@ class Plume2d():
                 self.advect_MC(self.u, self.u_tmp, self.u_forward, self.u_backward, self.u, self.v)
                 self.advect_MC(self.v, self.v_tmp, self.v_forward, self.v_backward, self.u, self.v)
             else:
-                self.advect_SL(self.density, self.density_tmp, self.u, self.v)
-                self.advect_SL(self.u, self.u_tmp, self.u, self.v)
-                self.advect_SL(self.v, self.v_tmp, self.u, self.v)
+                self.advect_SL_RK3(self.density, self.density_tmp, self.u, self.v)
+                self.advect_SL_RK3(self.u, self.u_tmp, self.u, self.v)
+                self.advect_SL_RK3(self.v, self.v_tmp, self.u, self.v)
             self.f_x.fill(0)
             self.f_y.fill(0)
             self.t_curr += self.dt
