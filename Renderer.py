@@ -1,13 +1,15 @@
 import taichi as ti
 import numpy as np
+from Solid import CELL_SOLID
 
 @ti.data_oriented
 class Renderer():
 
-    def __init__(self, res_x, res_y, dx) -> None:
+    def __init__(self, res_x, res_y, dx, cell) -> None:
         self.res_x = res_x
         self.res_y = res_y
         self.dx = dx
+        self.cell = ti.field(float, shape=(self.res_x, self.res_y))
 
         num_vertices = (res_x+1) * (res_y+1)
         num_triangles = 2*res_x*res_y
@@ -16,6 +18,23 @@ class Renderer():
         self.C = ti.Vector.field(3, dtype=float, shape=num_vertices)
 
         self.build_plane_mesh()
+        self.draw_solid(cell)
+
+    @ti.kernel
+    def draw_solid(self, cell: ti.template()):
+        self.cell.fill(0.)
+        for y in range(self.res_y):
+            for x in range(self.res_x):
+                cnt, tot = 0.0, 0.0
+                for i in range(-1, 2):
+                    for j in range(-1, 2):
+                        if x+i >= 0 and x+i < self.res_x and y+j >= 0 and y+j < self.res_y:
+                            if cell[x+i, y+j] > 0:
+                                cnt += 1
+                            tot += 1
+                if cnt > 0:
+                    self.cell[x, y] = cnt / tot
+
 
     @ti.kernel
     def build_plane_mesh(self):
@@ -48,7 +67,10 @@ class Renderer():
                 y1 = min(y, self.res_y - 1)
 
                 c = (q[x0, y0] + q[x0, y1] + q[x1, y0] + q[x1, y1]) / 4
-                self.C[x + y * (self.res_x + 1)].xyz = c, c, c
+                t = self.cell[x1, y1]
+                self.C[x + y * (self.res_x + 1)].xyz = c*(1.-t)+.1*t, c*(1.-t)+.2*t, c*(1.-t)+.3*t
+
+
         
     @ti.kernel
     def get_color_scaled(self, cmin: float, cmax: float, c1: ti.types.vector(3, float), c2: ti.types.vector(3, float)):

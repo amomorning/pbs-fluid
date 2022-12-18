@@ -1,5 +1,6 @@
 import taichi as ti
 import numpy as np
+from Solid import CELL_FLUID, CELL_SOLID, CELL_AIR
 from MICPCGSolver import MICPCGSolver
 from utils import (bilerp, 
                    cerp,
@@ -74,14 +75,38 @@ class Plume2d():
         self.q = ti.field(float, shape=(self.res_x, self.res_y))
         self.Ap = ti.field(float, shape=(self.res_x, self.res_y))
 
+        # init solid
+        # if args['bodies'] is not None:
+        self.bodies = args['bodies']
+        self._cell = ti.field(int, shape=(self.res_x, self.res_y))
+        self._body = ti.field(int, shape=(self.res_x, self.res_y))
+
+        print(len(self.bodies))
+
+        for x in range(self.res_x):
+            for y in range(self.res_y):
+                self._body[x, y] = 0
+                dx, dy = x / self.res_x, y / self.res_y
+                d = self.bodies[0].distance(dx, dy)
+                for i in range(1, len(self.bodies)):
+                    id = self.bodies[i].distance(dx, dy)
+                    if id < d:
+                        self._body[x, y] = i
+                        d = id
+                if d < 0.0:
+                    self._cell[x, y] = CELL_SOLID
+                else:
+                    self._cell[x, y] = CELL_FLUID
+
+
+
         #settings for MICPCG for solving poisson equation
         self.p_solver = None
         if(self.preconditioning):
-            celltype  = ti.field(int, shape=(self.res_x, self.res_y))
-            celltype.fill(1)
-            self.p_solver = MICPCGSolver(self.res_x, self.res_y, self.u, self.v, cell_type=celltype, MIC_blending=0.0)
+            # celltype  = ti.field(int, shape=(self.res_x, self.res_y))
+            # celltype.fill(1)
+            self.p_solver = MICPCGSolver(self.res_x, self.res_y, self.u, self.v, cell_type=self._cell, MIC_blending=0.0)
 
-        # self.init_solid()
         self.print_info()
         self.reset()
 
@@ -116,6 +141,13 @@ class Plume2d():
         print("Solver: {}".format(self.solver))
         print("Reflection: {}".format(self.reflection))
         print("\n\n")
+
+    @ti.kernel
+    def apply_solid(self, q: ti.template(), v: float):
+        for x, y in q:
+            if self._cell[x, y] == CELL_SOLID:
+                # print(x, y)
+                q[x, y] = v
 
     @ti.kernel
     def apply_source(self, q: ti.template(), xmin: float, xmax: float, ymin: float, ymax: float, v: float):
@@ -197,6 +229,7 @@ class Plume2d():
 
     # @ti.kernel
     # def init_solid(self):
+    #     ox, oy = self.get_offset(q)
     #     self.solid.fill(1)
 
     #     ixmin = int(0.45 * self.res_x)
@@ -328,25 +361,34 @@ class Plume2d():
 
         for x, y in self.v:
             self.v[x, y] += self.dt * self.f_y[x, y]
+    
+
 
     @ti.kernel
-    def set_zero(self):
+    def set_boundary_condition(self):
         """
         Velocity boundary condition
         u at x=0 and x=res_x is zero
         v at y=0 and y=res_y is zero
         """
-        sx = self.u.shape[0]
-        sy = self.u.shape[1]
-        for y in range(sy):
-            self.u[0, y] = 0
-            self.u[sx-1, y] = 0
+        
+        for x, y in self._cell:
+            # print(x, y, self._cell[x, y])
+            if self._cell[x, y] == CELL_SOLID:
+                # print(x, y)
+                self.u[x, y] = 0
+                self.v[x, y] = 0
 
-        sx = self.v.shape[0]
-        sy = self.v.shape[1]
-        for x in range(sx):
+        ux, uy = self.u.shape
+        for y in range(uy):
+            self.u[0, y] = 0
+            self.u[ux-1, y] = 0
+        
+        vx, vy = self.v.shape
+        for x in range(vx):
             self.v[x, 0] = 0
-            self.v[x, sy-1] = 0
+            self.v[x, vy-1] = 0
+        # print(ux, uy, vx, vy)
 
     # @ti.func
     # def set_pressure(self, x: int, y: int, rhs: float):
@@ -552,7 +594,7 @@ class Plume2d():
             self.add_wind()
 
         self.apply_force()
-        self.set_zero()
+        self.set_boundary_condition()
 
     def advect(self):
         if self.advection == "MAC":
@@ -593,7 +635,7 @@ class Plume2d():
         self.correct_velocity()
 
         # Apply velocity boundary condition
-        self.set_zero()
+        self.set_boundary_condition()
 
         compute_vorticity(self.vorticity, self.u, self.v, self.dx)
 

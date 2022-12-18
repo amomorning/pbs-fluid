@@ -1,10 +1,11 @@
 import taichi as ti
 from Plume2d import Plume2d
 from Renderer import Renderer
+from Solid import SolidBox, SolidSphere
 
 ti.init(arch=ti.cuda)
 
-res_x = 128
+res_x = 256
 res_y = int(res_x * 1)
 dx = 1
 dt = 0.005 * ti.sqrt((res_x + res_y) * 0.5)
@@ -15,6 +16,12 @@ interpolation = "cerp"
 integration = "rk3"
 solver = "GS"
 reflecton = True
+bodies = [
+    SolidBox(.5, .6, .7, .1, -.7),
+    SolidSphere(.7, .3, .2),
+    ]
+
+
 
 args = {
     'res_x': res_x,
@@ -27,7 +34,8 @@ args = {
     'interpolation': interpolation,    # bilerp, cerp
     'integration': integration,        # euler, rk3
     'solver': solver,
-    'reflection': reflecton
+    'reflection': reflecton,
+    'bodies': bodies,
 }
 
 plume = Plume2d(args)
@@ -37,10 +45,10 @@ plume.dt /= 2
 plume.reflection = True
 
 # For rendering
-renderer = Renderer(res_x, res_y, dx)
+renderer = Renderer(res_x, res_y, dx, plume._cell)
 
 
-window = ti.ui.Window("Plume 2d", (1024, 1024),
+window = ti.ui.Window("Plume 2d", (res_x, res_y),
                       vsync=True)
 canvas = window.get_canvas()
 canvas.set_background_color((0, 0, 0))
@@ -58,6 +66,7 @@ while window.running:
     for _ in range(substeps):
         plume.substep()
     renderer.render(plume.density, ti.Vector([0,0,0]), ti.Vector([1,1,1]))
+
 
     camera.position(plume.res_x / 2, plume.res_y / 2, 300)
     camera.lookat(plume.res_x / 2, plume.res_y / 2, 0)
