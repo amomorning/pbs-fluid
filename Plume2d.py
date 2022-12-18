@@ -2,27 +2,33 @@ import taichi as ti
 import numpy as np
 from Solid import CELL_FLUID, CELL_SOLID
 from MICPCGSolver import MICPCGSolver
+import utils
 from utils import (bilerp, 
                    cerp,
                    copy_field,
                    compute_divergence,
                    compute_vorticity,
                    euler,
-                   rk3)
+                   rk3,
+                   vec2)
+import random
 
 @ti.data_oriented
 class Plume2d():
 
+    P_FLUID = 1
+    P_OTHER = 0
+    FLIP_blending = 0.0
+
     def __init__(self, args):
         # Control flag
-        self.wind_on = False
-        self.MAC_on = True
-        self.velocity_on = False
+        self.wind_on = args['wind']
         self.reflection = args['reflection']
         self.advection = args['advection']               # SL, MAC, FLIP
         self.interpolation = args['interpolation']       # bilerp, cerp
         self.integration = args['integration']           # euler, rk3
         self.solver = args['solver']                     # GS, CG, MIC
+        self.preconditioning = True
 
         # Discretization parameter
         self.res_x = args['res_x']             # Width
@@ -31,10 +37,9 @@ class Plume2d():
         self.dt = args['dt']                   # Time discretization
         self.acc = args['accuracy']            # Poisson equation accuracy
         self.max_iters = args['poisson_iters'] # For solving the Poisson equation
+        self.npar = 2                          # Number of particles per edge
         self.t_curr = 0                        # Current time
         self.n_steps = 0                       # Current step
-
-        self.preconditioning = True
 
         # Quantities
         # Grid, offset=(0.5, 0.5)
@@ -100,6 +105,21 @@ class Plume2d():
 
 
 
+        # For particles
+        self.particle_positions = ti.Vector.field(2, dtype=ti.f32, shape=(self.res_x, self.res_y, self.npar, self.npar))
+        self.particle_velocities = ti.Vector.field(2, dtype=ti.f32, shape=(self.res_x, self.res_y, self.npar, self.npar))
+        self.particle_density = ti.field(dtype=ti.f32, shape=(self.res_x, self.res_y, self.npar, self.npar))
+        self.particle_type = ti.field(dtype=ti.f32, shape=(self.res_x, self.res_y, self.npar, self.npar))
+        self.pspace_x = self.dx / self.npar
+        self.pspace_y = self.dx / self.npar
+
+        self.u_last = ti.field(float, shape=(self.res_x+1, self.res_y))
+        self.v_last = ti.field(float, shape=(self.res_x, self.res_y+1))
+        self.density_last = ti.field(float, shape=(self.res_x, self.res_y))
+        self.u_weight = ti.field(dtype=ti.f32, shape=(self.res_x + 1, self.res_y))
+        self.v_weight = ti.field(dtype=ti.f32, shape=(self.res_x, self.res_y+1))
+        self.density_weight = ti.field(dtype=ti.f32, shape=(self.res_x, self.res_y))
+
         #settings for MICPCG for solving poisson equation
         self.p_solver = None
         if(self.preconditioning):
@@ -143,11 +163,139 @@ class Plume2d():
         print("\n\n")
 
     @ti.kernel
-    def apply_solid(self, q: ti.template(), v: float):
-        for x, y in q:
-            if self._cell[x, y] == CELL_SOLID:
-                # print(x, y)
-                q[x, y] = v
+    def init_particles(self, cell_type: ti.template()):
+        for i, j, ix, jx in self.particle_positions:
+            # if cell_type[i, j] == utils.FLUID:
+            self.particle_type[i, j, ix, jx] = self.P_FLUID
+            # else:
+            #     self.particle_type[i, j, ix, jx] = 0
+
+            px = i * self.dx + (ix + random.random()) * self.pspace_x
+            py = j * self.dx + (jx + random.random()) * self.pspace_y
+
+            self.particle_positions[i, j, ix, jx] = vec2(px, py)
+            self.particle_velocities[i, j, ix, jx] = vec2(0.0, 0.0)
+
+
+    @ti.kernel
+    def update_particle_velocities(self):
+        for p in ti.grouped(self.particle_positions):
+            if self.particle_type[p] == self.P_FLUID:
+                u = self.get_value(self.u, self.particle_positions[p][0], self.particle_positions[p][1])
+                v = self.get_value(self.u, self.particle_positions[p][0], self.particle_positions[p][1])
+                self.particle_velocities[p] = vec2(u, v)
+
+    @ti.kernel
+    def advect_particles(self):
+        for p in ti.grouped(self.particle_positions):
+            if self.particle_type[p] == self.P_FLUID:
+                pos = self.particle_positions[p]
+                pv = self.particle_velocities[p]
+
+                pos += pv * self.dt
+
+                if pos[0] <= self.dx:  # left boundary
+                    pos[0] = self.dx
+                    pv[0] = 0
+                if pos[0] >= self.res_x - self.dx:  # right boundary
+                    pos[0] = self.res_y - self.dx
+                    pv[0] = 0
+                if pos[1] <= self.dx:  # bottom boundary
+                    pos[1] = self.dx
+                    pv[1] = 0
+                if pos[1] >= self.res_y - self.dx:  # top boundary
+                    pos[1] = self.res_y - self.dx
+                    pv[1] = 0
+
+                self.particle_positions[p] = pos
+                self.particle_velocities[p] = pv
+
+    @ti.func
+    def gather(self, grid_v, grid_vlast, xp, offset):
+        inv_dx = vec2(1.0 / self.dx, 1.0 / self.dx).cast(ti.f32)
+        base = (xp * inv_dx - (offset + 0.5)).cast(ti.i32)
+        fx = xp * inv_dx - (base.cast(ti.f32) + offset)
+
+        w = [0.5*(1.5-fx)**2, 0.75-(fx-1)**2, 0.5*(fx-0.5)**2] # Bspline
+
+        v_pic = 0.0
+        v_flip = 0.0
+
+        for i in ti.static(range(3)):
+            for j in ti.static(range(3)):
+                neighbor = vec2(i, j)
+                weight = w[i][0] * w[j][1]
+                v_pic += weight * grid_v[base + neighbor]
+                v_flip += weight * (grid_v[base + neighbor] - grid_vlast[base + neighbor])
+
+        return v_pic, v_flip
+
+    @ti.kernel
+    def G2P(self):
+        offset_u = vec2(0.0, 0.5)
+        offset_v = vec2(0.5, 0.0)
+        offset_q = vec2(0.0, 0.0)
+        for p in ti.grouped(self.particle_positions):
+            if self.particle_type[p] == self.P_FLUID:
+                # update velocity
+                xp = self.particle_positions[p]
+                u_pic, u_flip = self.gather(self.u, self.u_last, xp, offset_u)
+                v_pic, v_flip = self.gather(self.v, self.v_last, xp, offset_v)
+                q_pic, q_flip = self.gather(self.density, self.density_last, xp, offset_q)
+
+                new_v_pic = vec2(u_pic, v_pic)
+                new_q_pic = q_pic
+
+                new_v_flip = self.particle_velocities[p] + vec2(u_flip, v_flip)
+                new_q_flip = self.particle_density[p] + q_flip
+
+                self.particle_velocities[p] = self.FLIP_blending * new_v_flip + (
+                    1 - self.FLIP_blending) * new_v_pic
+                
+                self.particle_density[p] = self.FLIP_blending * new_q_flip + (
+                    1 - self.FLIP_blending) * new_q_pic
+
+    @ti.func
+    def scatter(self, grid_v, grid_m, xp, vp, offset):
+        inv_dx = vec2(1.0 / self.dx, 1.0 / self.dx).cast(ti.f32)
+        base = (xp * inv_dx - (offset + 0.5)).cast(ti.i32)
+        fx = xp * inv_dx - (base.cast(ti.f32) + offset)
+
+        w = [0.5*(1.5-fx)**2, 0.75-(fx-1)**2, 0.5*(fx-0.5)**2] # Bspline
+
+        for i in ti.static(range(3)):
+            for j in ti.static(range(3)):
+                neighbor = vec2(i, j)
+                weight = w[i][0] * w[j][1]
+                grid_v[base + neighbor] += weight * vp
+                grid_m[base + neighbor] += weight
+
+    @ti.kernel
+    def P2G(self):
+        offset_u = vec2(0.0, 0.5)
+        offset_v = vec2(0.5, 0.0)
+        offset_q = vec2(0.0, 0.0)
+        for p in ti.grouped(self.particle_positions):
+            if self.particle_type[p] == self.P_FLUID:
+                xp = self.particle_positions[p]
+
+                self.scatter(self.u, self.u_weight, xp, self.particle_velocities[p][0], offset_u)
+                self.scatter(self.v, self.v_weight, xp, self.particle_velocities[p][1], offset_v)
+                self.scatter(self.density, self.density_weight, xp, self.particle_density[p], offset_q)
+
+    @ti.kernel
+    def grid_norm(self):
+        for i, j in self.u:
+            if self.u_weight[i, j] > 0:
+                self.u[i, j] = self.u[i, j] / self.u_weight[i, j]
+
+        for i, j in self.v:
+            if self.v_weight[i, j] > 0:
+                self.v[i, j] = self.v[i, j] / self.v_weight[i, j]
+
+        for i, j in self.density:
+            if self.density_weight[i, j] > 0:
+                self.density[i, j] = self.density[i, j] / self.density_weight[i, j]
 
     @ti.kernel
     def apply_source(self, q: ti.template(), xmin: float, xmax: float, ymin: float, ymax: float, v: float):
@@ -602,7 +750,20 @@ class Plume2d():
             self.advect_MC(self.u, self.u_tmp, self.u_forward, self.u_backward, self.u, self.v)
             self.advect_MC(self.v, self.v_tmp, self.v_forward, self.v_backward, self.u, self.v)
         elif self.advection == "FLIP":
-            pass
+            self.G2P()
+            self.advect_particles()
+            # self.u.fill(0.0)
+            # self.v.fill(0.0)
+            # self.density.fill(0.0)
+            # self.u_weight.fill(0.0)
+            # self.v_weight.fill(0.0)
+            # self.density_weight.fill(0.0)
+
+            self.P2G()
+            self.grid_norm()
+            self.u_last.copy_from(self.u)
+            self.v_last.copy_from(self.v)
+            self.density_last.copy_from(self.density)
         else:
             self.advect_SL(self.density, self.density_tmp, self.u, self.v)
             self.advect_SL(self.u, self.u_tmp, self.u, self.v)

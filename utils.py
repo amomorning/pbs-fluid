@@ -1,5 +1,14 @@
 import taichi as ti
 
+
+FLUID = 0
+AIR = 1
+SOLID = 2
+
+@ti.pyfunc
+def vec2(x, y):
+    return ti.Vector([x, y])
+
 @ti.func
 def lerp(a: float, b: float, x: float):
     """
