@@ -2,8 +2,7 @@ import taichi as ti
 import math
 
 CELL_FLUID = 0
-CELL_AIR = 1
-CELL_SOLID = 2
+CELL_SOLID = 1 
 
 def nsgn(x):
     return -1.0 if x < 0.0 else 1.0

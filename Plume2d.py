@@ -1,6 +1,6 @@
 import taichi as ti
 import numpy as np
-from Solid import CELL_FLUID, CELL_SOLID, CELL_AIR
+from Solid import CELL_FLUID, CELL_SOLID
 from MICPCGSolver import MICPCGSolver
 from utils import (bilerp, 
                    cerp,

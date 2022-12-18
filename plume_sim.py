@@ -48,20 +48,19 @@ plume.reflection = True
 renderer = Renderer(res_x, res_y, dx, plume._cell)
 
 
-window = ti.ui.Window("Plume 2d", (res_x, res_y),
+window = ti.ui.Window("Plume 2d", (res_x*2, res_y*2),
                       vsync=True)
 canvas = window.get_canvas()
 canvas.set_background_color((0, 0, 0))
 scene = ti.ui.Scene()
 camera = ti.ui.Camera()
 
-substeps = 1
+substeps = 10
 frame = 0
 
 while window.running:
-    # if plume.t_curr > 200:
-    #     # Reset
-    #     plume.reset()
+    if frame > 500:
+        break
 
     for _ in range(substeps):
         plume.substep()
@@ -81,7 +80,7 @@ while window.running:
 
     canvas.scene(scene)
     
-    # window.save_image(f"./output/{advection}_{interpolation}_{integration}_{solver}_{reflecton}_{frame:05d}.png")
+    window.save_image(f"./output/{advection}_{interpolation}_{integration}_{solver}_{reflecton}_{frame:05d}.png")
     window.show()
 
     frame += 1

@@ -68,7 +68,7 @@ class Renderer():
 
                 c = (q[x0, y0] + q[x0, y1] + q[x1, y0] + q[x1, y1]) / 4
                 t = self.cell[x1, y1]
-                self.C[x + y * (self.res_x + 1)].xyz = c*(1.-t)+.1*t, c*(1.-t)+.2*t, c*(1.-t)+.3*t
+                self.C[x + y * (self.res_x + 1)].xyz = c*(1.-t)+.1*t, c*(1.-t)+.56*t, c*(1.-t)+.49*t
 
 
         

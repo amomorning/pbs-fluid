@@ -260,3 +260,5 @@ dmypy.json
 # Added
 *.png
 .DS_Store
+
+output/
