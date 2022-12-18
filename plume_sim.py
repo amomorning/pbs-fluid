@@ -10,11 +10,12 @@ dx = 1
 dt = 0.005 * ti.sqrt((res_x + res_y) * 0.5)
 accuracy = 1e-4
 n_iters = 100
-advection = "MAC"
+advection = "FLIP"
 interpolation = "cerp"
 integration = "rk3"
 solver = "GS"
-reflecton = True
+reflecton = False
+wind = False
 
 args = {
     'res_x': res_x,
@@ -23,6 +24,7 @@ args = {
     'dt': dt,
     'accuracy': accuracy,
     'poisson_iters': n_iters,
+    'wind': wind,
     'advection': advection,         # SL, MAC, FLIP
     'interpolation': interpolation,    # bilerp, cerp
     'integration': integration,        # euler, rk3
@@ -31,10 +33,6 @@ args = {
 }
 
 plume = Plume2d(args)
-plume.MAC_on = True
-# plume.wind_on = True
-plume.dt /= 2
-plume.reflection = True
 
 # For rendering
 renderer = Renderer(res_x, res_y, dx)
