@@ -14,7 +14,7 @@ advection = "MAC"
 interpolation = "cerp"
 integration = "rk3"
 solver = "GS"
-reflecton = False
+reflecton = True
 
 args = {
     'res_x': res_x,
@@ -47,7 +47,7 @@ canvas.set_background_color((0, 0, 0))
 scene = ti.ui.Scene()
 camera = ti.ui.Camera()
 
-substeps = 20
+substeps = 1
 frame = 0
 
 while window.running:
@@ -72,7 +72,7 @@ while window.running:
 
     canvas.scene(scene)
     
-    window.save_image(f"./output/{advection}_{interpolation}_{integration}_{solver}_{reflecton}_{frame:05d}.png")
+    # window.save_image(f"./output/{advection}_{interpolation}_{integration}_{solver}_{reflecton}_{frame:05d}.png")
     window.show()
 
     frame += 1

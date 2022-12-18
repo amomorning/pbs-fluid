@@ -60,6 +60,10 @@ class Plume2d():
         self.v_backward = ti.field(float, shape=(self.res_x, self.res_y+1)) # For mc-advection
         self.f_y = ti.field(float, shape=(self.res_x, self.res_y+1))
 
+        # For reflection
+        self.u_half = ti.field(float, shape=(self.res_x+1, self.res_y))
+        self.v_half = ti.field(float, shape=(self.res_x, self.res_y+1))
+
         # Indicate if solid, 0 if solid, 1 if fluid
         # self.solid = ti.field(float, shape=(self.res_x, self.res_y))
 
@@ -530,11 +534,11 @@ class Plume2d():
 
     @ti.kernel
     def reflect(self):
-        for x, y in self.u_tmp:
-            self.u_tmp[x, y] = 2 * self.u[x, y] - self.u_tmp[x, y]
+        for x, y in self.u_half:
+            self.u_half[x, y] = 2 * self.u[x, y] - self.u_tmp[x, y]
         
-        for x, y in self.v_tmp:
-            self.v_tmp[x, y] = 2 * self.v[x, y] - self.v_tmp[x ,y]
+        for x, y in self.v_half:
+            self.v_half[x, y] = 2 * self.v[x, y] - self.v_tmp[x ,y]
 
     def apply_init(self):
         # self.apply_source(self.density, 0.45, 0.55, 0.10, 0.15, 1)
@@ -561,6 +565,22 @@ class Plume2d():
             self.advect_SL(self.density, self.density_tmp, self.u, self.v)
             self.advect_SL(self.u, self.u_tmp, self.u, self.v)
             self.advect_SL(self.v, self.v_tmp, self.u, self.v)
+    
+    def advect_2(self):
+        if self.advection == "MAC":
+            self.advect_MC(self.density, self.density_tmp, self.density_forward, self.density_forward, self.u, self.v)
+            self.advect_MC(self.u_half, self.u_tmp, self.u_forward, self.u_backward, self.u, self.v)
+            self.advect_MC(self.v_half, self.v_tmp, self.v_forward, self.v_backward, self.u, self.v)
+            self.copy_to(self.u_half, self.u)
+            self.copy_to(self.v_half, self.v)
+        elif self.advection == "FLIP":
+            pass
+        else:
+            self.advect_SL(self.density, self.density_tmp, self.u, self.v)
+            self.advect_SL(self.u_tmp, self.u_tmp, self.u, self.v)
+            self.advect_SL(self.v_tmp, self.v_tmp, self.u, self.v)
+            self.copy_to(self.u_tmp, self.u)
+            self.copy_to(self.v_tmp, self.v)
 
     def projection(self):
         # Prepare the Poisson equation (r.h.s)
@@ -582,7 +602,7 @@ class Plume2d():
             self.apply_init()
             self.projection()
             self.reflect()
-            self.advect()
+            self.advect_2()
             self.body_force()
             self.projection()
             self.advect()
