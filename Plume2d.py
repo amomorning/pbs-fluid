@@ -82,6 +82,8 @@ class Plume2d():
         # if args['bodies'] is not None:
         self.bodies = args['bodies']
         self._cell = ti.field(int, shape=(self.res_x, self.res_y))
+        self.solid = ti.field(int, shape=(self.res_x, self.res_y))
+        self.solid.fill(1)
 
         for x in range(self.res_x):
             for y in range(self.res_y):
@@ -93,6 +95,7 @@ class Plume2d():
 
                 if d < 0.0:
                     self._cell[x, y] = CELL_SOLID
+                    self.solid[x, y] = 0
                 else:
                     self._cell[x, y] = CELL_AIR
                 
@@ -119,8 +122,6 @@ class Plume2d():
         #settings for MICPCG for solving poisson equation
         self.p_solver = None
         if(self.preconditioning):
-            # celltype  = ti.field(int, shape=(self.res_x, self.res_y))
-            # celltype.fill(1)
             self.p_solver = MICPCGSolver(self.res_x, self.res_y, self.u, self.v, cell_type=self._cell, MIC_blending=0.0)
 
         self.print_info()
@@ -371,20 +372,6 @@ class Plume2d():
 
         return cerp(q0,q1,q2,q3,y_weight)
 
-    # @ti.kernel
-    # def init_solid(self):
-    #     ox, oy = self.get_offset(q)
-    #     self.solid.fill(1)
-
-    #     ixmin = int(0.45 * self.res_x)
-    #     ixmax = int(0.55 * self.res_x)
-    #     iymin = int(0.45 * self.res_y)
-    #     iymax = int(0.55 * self.res_y)
-
-    #     for x in range(ixmin, ixmax):
-    #         for y in range(iymin, iymax):
-    #             self.solid[x, y] = 0
-
     @ti.kernel
     def copy_to(self, tmp: ti.template(), v: ti.template()):
         copy_field(tmp, v)
@@ -517,9 +504,7 @@ class Plume2d():
         """
         
         for x, y in self._cell:
-            # print(x, y, self._cell[x, y])
             if self._cell[x, y] == CELL_SOLID:
-                # print(x, y)
                 self.u[x, y] = 0
                 self.v[x, y] = 0
 
@@ -534,17 +519,21 @@ class Plume2d():
             self.v[x, vy-1] = 0
         # print(ux, uy, vx, vy)
 
-    # @ti.func
-    # def set_pressure(self, x: int, y: int, rhs: float):
-    #     """
-    #     Set the pressure with Neumann condition
-    #     """
-    #     numerator = rhs + self.pressure[x-1, y] * self.solid[x-1, y] + self.pressure[x+1, y] * self.solid[x+1, y] + self.pressure[x, y-1] * self.solid[x, y-1]+ self.pressure[x, y+1] * self.solid[x, y+1]
-    #     denominator = self.solid[x-1, y] + self.solid[x+1, y] + self.solid[x, y-1] + self.solid[x, y+1]
-    #     if denominator == 0:
-    #         self.pressure[x, y] = 0
-    #     else:
-    #         self.pressure[x, y] = numerator / denominator
+    @ti.func
+    def set_pressure(self, x: int, y: int, rhs: float):
+        """
+        Set the pressure with Neumann condition
+        """
+        numerator = self.pressure[x-1, y] * self.solid[x-1, y] \
+                    + self.pressure[x+1, y] * self.solid[x+1, y] \
+                    + self.pressure[x, y-1] * self.solid[x, y-1] \
+                    + self.pressure[x, y+1] * self.solid[x, y+1]
+        denominator = self.solid[x-1, y] + self.solid[x+1, y] \
+                    + self.solid[x, y-1] + self.solid[x, y+1]
+        if denominator == 0:
+            self.pressure[x, y] = 0
+        else:
+            self.pressure[x, y] = (rhs + numerator) / denominator
 
     @ti.kernel
     def solve_poisson_GS(self):
@@ -561,15 +550,21 @@ class Plume2d():
                 for x in range(0, self.res_x):
                     b = -self.divergence[x, y] / self.dt * rho
                     # Update in place
-                    # self.set_pressure(x, y, dx2 * b)
-                    self.pressure[x,y] = (dx2 * b + self.pressure[x-1, y] + self.pressure[x+1, y] + self.pressure[x, y-1] + self.pressure[x, y+1]) / 4
+                    self.set_pressure(x, y, dx2 * b)
 
             # Compute the new residual, i.e. the sum of the squares of the individual residuals (squared L2-norm)
             residual = 0
             for y in range(0, self.res_y):
                 for x in range(0, self.res_x):
                     b = -self.divergence[x,y] / self.dt * rho
-                    cell_residual = b - (4 * self.pressure[x, y] - self.pressure[x-1, y] - self.pressure[x+1, y] - self.pressure[x, y-1] - self.pressure[x, y+1]) / dx2 
+
+                    t = self.solid[x+1, y] + self.solid[x-1, y] + self.solid[x, y-1] + self.solid[x, y+1]
+                    
+                    cell_residual = b - (t * self.pressure[x, y] \
+                            - self.pressure[x-1, y] * self.solid[x-1, y] \
+                            - self.pressure[x+1, y] * self.solid[x+1, y] \
+                            - self.pressure[x, y-1] * self.solid[x, y-1] \
+                            - self.pressure[x, y+1] * self.solid[x, y+1]) / dx2 
                     residual += cell_residual ** 2
 
             residual = ti.sqrt(residual)
@@ -621,7 +616,7 @@ class Plume2d():
             for i in range(0, self.res_y): 
                 for j in range(0, self.res_x):
                     delta_new += self.r[i,j] * self.d[i,j]
-            print(f"delta of res {delta_new}")
+            # print(f"delta of res {delta_new}")
             # beta = delta_new/delta_old          
 
             #  Ad = A.dot(q)
@@ -689,12 +684,23 @@ class Plume2d():
 
     @ti.kernel
     def correct_velocity(self):
-        rho = 1
         # Note: velocity u_{i+1/2} is practically stored at i+1, hence xV_{i}  -= dt * (p_{i} - p_{i-1}) / dx
-        for y in range(0, self.res_y):
-            for x in range(0, self.res_x):
-                self.u[x, y] = self.u[x, y] - self.dt / rho * (self.pressure[x, y] - self.pressure[x-1, y]) / self.dx
-                self.v[x, y] = self.v[x, y] - self.dt / rho * (self.pressure[x, y] - self.pressure[x, y-1]) / self.dx
+        for y in range(self.res_y):
+            for x in range(self.res_x):
+                if self._cell[x, y] == CELL_FLUID or self._cell[x-1, y] == CELL_FLUID:
+                    if self._cell[x, y] == CELL_SOLID or self._cell[x-1, y] == CELL_SOLID:
+                        self.u[x, y] = 0
+                    else:
+                        self.u[x, y] = self.u[x, y] - self.dt * (self.pressure[x, y] - self.pressure[x-1, y]) / self.dx                    
+                else:
+                    self.u[x, y] = self.u[x, y] - self.dt * (self.pressure[x, y] - self.pressure[x-1, y]) / self.dx
+                if self._cell[x, y] == CELL_FLUID or self._cell[x, y-1] == CELL_FLUID:
+                    if self._cell[x, y] == CELL_SOLID or self._cell[x, y-1] == CELL_SOLID:
+                        self.v[x, y] = 0
+                    else:
+                        self.v[x, y] = self.v[x, y] -  self.dt * (self.pressure[x, y] - self.pressure[x, y-1]) /self.dx
+                else:
+                    self.v[x, y] = self.v[x, y] -  self.dt * (self.pressure[x, y] - self.pressure[x, y-1]) /self.dx
 
     # Integration each step
     def reset(self):
@@ -804,7 +810,7 @@ class Plume2d():
             self.advect_reflection()
             self.body_force()
             self.projection()
-            self.advect_reflection()
+            self.advect()
             self.body_force()
             self.f_x.fill(0)
             self.f_y.fill(0)

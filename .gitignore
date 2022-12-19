@@ -261,4 +261,4 @@ dmypy.json
 *.png
 .DS_Store
 
-output/
+output*

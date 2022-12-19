@@ -100,10 +100,10 @@ class MICPCGSolver:
                                     self.precon[i - 1, j]**2 + self.Ay[i, j - 1] *\
                                     self.Ax[i, j - 1] * self.precon[i, j - 1]**2)
 
-                    if e < sigma * self.Adiag[i, j]:
-                        e = self.Adiag[i, j]
+                        if e < sigma * self.Adiag[i, j]:
+                            e = self.Adiag[i, j]
 
-                    self.precon[i, j] = 1 / ti.sqrt(e)
+                        self.precon[i, j] = 1 / ti.sqrt(e)
         # print("successfully init PCG preconditioner")
 
     def system_init(self, scale_A, scale_b):
@@ -197,39 +197,39 @@ class MICPCGSolver:
         sum = 0.0
         for i in range(0, self.res_y): 
             for j in range(0, self.res_x):
-            # if self.cell_type[i, j] == 1:
-                sum += p[i, j] * q[i, j]
+                if self.cell_type[i, j] == CELL_FLUID:
+                    sum += p[i, j] * q[i, j]
         return sum
 
     @ti.kernel
     def compute_As(self):
         for i in range(0, self.res_y): 
                 for j in range(0, self.res_x):
-            # if self.cell_type[i, j] == 1:
-                    self.As[i, j] = self.Adiag[i, j] * self.s[i, j] + self.Ax[
-                        i - 1, j] * self.s[i - 1, j] + self.Ax[i, j] * self.s[
-                            i + 1, j] + self.Ay[i, j - 1] * self.s[
-                                i, j - 1] + self.Ay[i, j] * self.s[i, j + 1]
+                    if self.cell_type[i, j] == CELL_FLUID:
+                        self.As[i, j] = self.Adiag[i, j] * self.s[i, j] + self.Ax[
+                            i - 1, j] * self.s[i - 1, j] + self.Ax[i, j] * self.s[
+                                i + 1, j] + self.Ay[i, j - 1] * self.s[
+                                    i, j - 1] + self.Ay[i, j] * self.s[i, j + 1]
 
     @ti.kernel
     def update_p(self):
         for i in range(0, self.res_y): 
                 for j in range(0, self.res_x):
-            # if self.cell_type[i, j] == 1:
-                    self.p[i, j] = self.p[i, j] + self.alpha * self.s[i, j]
+                    if self.cell_type[i, j] == CELL_FLUID:
+                        self.p[i, j] = self.p[i, j] + self.alpha * self.s[i, j]
 
     @ti.kernel
     def update_r(self):
         for i in range(0, self.res_y): 
                 for j in range(0, self.res_x):
-            # if self.cell_type[i, j] == 1:
-                    self.r[i, j] = self.r[i, j] - self.alpha * self.As[i, j]
+                    if self.cell_type[i, j] == CELL_FLUID:
+                        self.r[i, j] = self.r[i, j] - self.alpha * self.As[i, j]
 
     @ti.kernel
     def update_s(self):
         for i in range(0, self.res_y): 
-                for j in range(0, self.res_x):
-            # if self.cell_type[i, j] == 1:
+            for j in range(0, self.res_x):
+                if self.cell_type[i, j] == CELL_FLUID:
                   self.s[i, j] = self.z[i, j] + self.beta * self.s[i, j]
 
     @ti.kernel
@@ -238,13 +238,12 @@ class MICPCGSolver:
         for _ in range(1):
             for i in range(0, self.res_y): 
                 for j in range(0, self.res_x):
-                # if self.cell_type[i, j] == 1:
-                    t = self.r[i, j] - self.Ax[i - 1, j] * self.precon[
-                        i - 1, j] * self.q[i - 1, j] - self.Ay[
-                            i, j - 1] * self.precon[i, j - 1] * self.q[i,
-                                                                       j - 1]
+                    if self.cell_type[i, j] == CELL_FLUID:
+                        t = self.r[i, j] - self.Ax[i - 1, j] * self.precon[
+                            i - 1, j] * self.q[i - 1, j] - self.Ay[
+                                i, j - 1] * self.precon[i, j - 1] * self.q[i, j - 1]
 
-                    self.q[i, j] = t * self.precon[i, j]
+                        self.q[i, j] = t * self.precon[i, j]
 
         # next solve LTz = q
         for _ in range(1):
@@ -258,4 +257,4 @@ class MICPCGSolver:
                             i, j] * self.z[i + 1, j] - self.Ay[i, j] * self.precon[
                                 i, j] * self.z[i, j + 1]
 
-                    self.z[i, j] = t * self.precon[i, j]
+                        self.z[i, j] = t * self.precon[i, j]
