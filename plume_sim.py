@@ -5,25 +5,22 @@ from Solid import SolidBox, SolidSphere
 
 ti.init(arch=ti.cuda)
 
-res_x = 256
+res_x = 128
 res_y = int(res_x * 1)
 dx = 1
 dt = 0.005 * ti.sqrt((res_x + res_y) * 0.5)
-accuracy = 1e-4
+accuracy = 1e-5
 n_iters = 100
-advection = "FLIP"
-interpolation = "cerp"
-integration = "rk3"
-solver = "GS"
-reflecton = True
-bodies = [
-    SolidBox(.5, .6, .7, .1, -.7),
-    SolidSphere(.7, .3, .2),
-    ]
-
-
-reflecton = False
+advection = "MAC"       # SL, MAC, FLIP
+interpolation = "cerp"  # bilerp, cerp
+integration = "euler"     # euler, rk3
+solver = "GS"           
+reflecton = True        # True, False
 wind = False
+bodies = [
+    # SolidBox(.5, .6, .7, .1, -.7),
+    # SolidSphere(.7, .3, .2),
+    ]
 
 args = {
     'res_x': res_x,
@@ -33,11 +30,11 @@ args = {
     'accuracy': accuracy,
     'poisson_iters': n_iters,
     'wind': wind,
-    'advection': advection,         # SL, MAC, FLIP
-    'interpolation': interpolation,    # bilerp, cerp
-    'integration': integration,        # euler, rk3
+    'advection': advection,             
+    'interpolation': interpolation,    
+    'integration': integration,        
     'solver': solver,
-    'reflection': reflecton,
+    'reflection': reflecton,           
     'bodies': bodies,
 }
 

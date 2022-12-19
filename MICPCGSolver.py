@@ -1,5 +1,5 @@
 import taichi as ti
-import utils
+from Solid import CELL_FLUID, CELL_SOLID, CELL_AIR
 
 
 @ti.data_oriented
@@ -43,45 +43,45 @@ class MICPCGSolver:
         #scale_A for dt/(rho * dx2)
         for i in range(0, self.res_y): 
             for j in range(0, self.res_x):
-                # if self.cell_type[i, j] == 1:
-                self.b[i,j] = -1 * scale_b * (self.u[i + 1, j] - self.u[i, j] + self.v[i, j + 1] - self.v[i, j]) 
+                if self.cell_type[i, j] == CELL_FLUID:
+                    self.b[i,j] = -1 * scale_b * (self.u[i + 1, j] - self.u[i, j] + self.v[i, j + 1] - self.v[i, j]) 
                     # compute for the div(can be replace by self.div)
 
         #modify right hand side of linear system to account for solid velocities
         #currently hard code solid velocities to zero
 
-        # for i in range(0, self.res_y): 
-        #     for j in range(0, self.res_x):
-        #         if self.cell_type[i, j] == 1:
-        #             if self.cell_type[i - 1, j] == 0:
-        #                 self.b[i, j] -= scale_b * (self.u[i, j] - 0)
-        #             if self.cell_type[i + 1, j] == 0:
-        #                 self.b[i, j] += scale_b * (self.u[i + 1, j] - 0)
+        for i in range(0, self.res_y): 
+            for j in range(0, self.res_x):
+                if self.cell_type[i, j] == CELL_FLUID:
+                    if self.cell_type[i - 1, j] == CELL_SOLID:
+                        self.b[i, j] -= scale_b * (self.u[i, j] - 0)
+                    if self.cell_type[i + 1, j] == CELL_SOLID:
+                        self.b[i, j] += scale_b * (self.u[i + 1, j] - 0)
 
-        #             if self.cell_type[i, j - 1] == 0:
-        #                 self.b[i, j] -= scale_b * (self.v[i, j] - 0)
-        #             if self.cell_type[i, j + 1] == 0:
-        #                 self.b[i, j] += scale_b * (self.v[i, j + 1] - 0)
+                    if self.cell_type[i, j - 1] == CELL_SOLID:
+                        self.b[i, j] -= scale_b * (self.v[i, j] - 0)
+                    if self.cell_type[i, j + 1] == CELL_SOLID:
+                        self.b[i, j] += scale_b * (self.v[i, j + 1] - 0)
 
         # define left handside of linear system
         for i in range(0, self.res_y): 
             for j in range(0, self.res_x):
-                # if self.cell_type[i, j] == 1:
-                    # if self.cell_type[i - 1, j] == 1:
-                    self.Adiag[i, j] += scale_A
-                    # elif self.cell_type[i + 1, j] == 1:
-                    self.Adiag[i, j] += scale_A
-                    self.Ax[i, j] = -scale_A
-                    # elif self.cell_type[i + 1, j] == utils.AIR:
-                    #     self.Adiag[i, j] += scale_A
+                if self.cell_type[i, j] == CELL_FLUID:
+                    if self.cell_type[i - 1, j] == CELL_FLUID:
+                        self.Adiag[i, j] += scale_A
+                    if self.cell_type[i + 1, j] == CELL_FLUID:
+                        self.Adiag[i, j] += scale_A
+                        self.Ax[i, j] = -scale_A
+                    elif self.cell_type[i + 1, j] == CELL_AIR:
+                        self.Adiag[i, j] += scale_A
 
-                    # if self.cell_type[i, j - 1] == 1:
-                    self.Adiag[i, j] += scale_A
-                    # elif self.cell_type[i, j + 1] == 1:
-                    self.Adiag[i, j] += scale_A
-                    self.Ay[i, j] = -scale_A
-                    # elif self.cell_type[i, j + 1] == utils.AIR:
-                    #     self.Adiag[i, j] += scale_A
+                    if self.cell_type[i, j - 1] == CELL_FLUID:
+                        self.Adiag[i, j] += scale_A
+                    if self.cell_type[i, j + 1] == CELL_FLUID:
+                        self.Adiag[i, j] += scale_A
+                        self.Ay[i, j] = -scale_A
+                    elif self.cell_type[i, j + 1] == CELL_AIR:
+                        self.Adiag[i, j] += scale_A
         # print("successfully init PCG kernel")
 
     @ti.kernel
@@ -91,14 +91,14 @@ class MICPCGSolver:
         for _ in range(1):  # force serial
             for i in range(0, self.res_y): 
                 for j in range(0, self.res_x):
-                    # if self.cell_type[i, j] == 1:
-                    e = self.Adiag[i, j] - (\
-                        self.Ax[i - 1, j] * self.precon[i - 1, j])**2 - (\
-                            self.Ay[i, j - 1] *\
-                            self.precon[i, j - 1])**2 - self.MIC_blending * (\
-                                self.Ax[i - 1, j] * self.Ay[i - 1, j] *\
-                                self.precon[i - 1, j]**2 + self.Ay[i, j - 1] *\
-                                self.Ax[i, j - 1] * self.precon[i, j - 1]**2)
+                    if self.cell_type[i, j] == CELL_FLUID:
+                        e = self.Adiag[i, j] - (\
+                            self.Ax[i - 1, j] * self.precon[i - 1, j])**2 - (\
+                                self.Ay[i, j - 1] *\
+                                self.precon[i, j - 1])**2 - self.MIC_blending * (\
+                                    self.Ax[i - 1, j] * self.Ay[i - 1, j] *\
+                                    self.precon[i - 1, j]**2 + self.Ay[i, j - 1] *\
+                                    self.Ax[i, j - 1] * self.precon[i, j - 1]**2)
 
                     if e < sigma * self.Adiag[i, j]:
                         e = self.Adiag[i, j]
@@ -253,9 +253,9 @@ class MICPCGSolver:
                     i = self.res_x - 1 - ix
                     j = self.res_y - 1 - iy
 
-                    # if self.cell_type[i, j] == 1:
-                    t = self.q[i, j] - self.Ax[i, j] * self.precon[
-                        i, j] * self.z[i + 1, j] - self.Ay[i, j] * self.precon[
-                            i, j] * self.z[i, j + 1]
+                    if self.cell_type[i, j] == CELL_FLUID:
+                        t = self.q[i, j] - self.Ax[i, j] * self.precon[
+                            i, j] * self.z[i + 1, j] - self.Ay[i, j] * self.precon[
+                                i, j] * self.z[i, j + 1]
 
                     self.z[i, j] = t * self.precon[i, j]

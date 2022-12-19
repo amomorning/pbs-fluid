@@ -1,6 +1,6 @@
 import taichi as ti
 import numpy as np
-from Solid import CELL_FLUID, CELL_SOLID
+from Solid import CELL_FLUID, CELL_SOLID, CELL_AIR
 from MICPCGSolver import MICPCGSolver
 import utils
 from utils import (bilerp, 
@@ -16,8 +16,6 @@ import random
 @ti.data_oriented
 class Plume2d():
 
-    P_FLUID = 1
-    P_OTHER = 0
     FLIP_blending = 0.0
 
     def __init__(self, args):
@@ -84,23 +82,21 @@ class Plume2d():
         # if args['bodies'] is not None:
         self.bodies = args['bodies']
         self._cell = ti.field(int, shape=(self.res_x, self.res_y))
-        self._body = ti.field(int, shape=(self.res_x, self.res_y))
-
-        print(len(self.bodies))
 
         for x in range(self.res_x):
             for y in range(self.res_y):
-                self._body[x, y] = 0
                 dx, dy = x / self.res_x, y / self.res_y
-                d = self.bodies[0].distance(dx, dy)
-                for i in range(1, len(self.bodies)):
-                    id = self.bodies[i].distance(dx, dy)
-                    if id < d:
-                        self._body[x, y] = i
-                        d = id
+                d = 0.0
+                for i in range(len(self.bodies)):
+                    d = ti.min(d, self.bodies[i].distance(dx, dy))
+                
+
                 if d < 0.0:
                     self._cell[x, y] = CELL_SOLID
                 else:
+                    self._cell[x, y] = CELL_AIR
+                
+                if dx > 0.45 and dx < 0.55 and dy > 0.10 and dy < 0.15:
                     self._cell[x, y] = CELL_FLUID
 
 
@@ -166,7 +162,7 @@ class Plume2d():
     def init_particles(self, cell_type: ti.template()):
         for i, j, ix, jx in self.particle_positions:
             # if cell_type[i, j] == utils.FLUID:
-            self.particle_type[i, j, ix, jx] = self.P_FLUID
+            self.particle_type[i, j, ix, jx] = CELL_FLUID
             # else:
             #     self.particle_type[i, j, ix, jx] = 0
 
@@ -180,7 +176,7 @@ class Plume2d():
     @ti.kernel
     def update_particle_velocities(self):
         for p in ti.grouped(self.particle_positions):
-            if self.particle_type[p] == self.P_FLUID:
+            if self.particle_type[p] == CELL_FLUID:
                 u = self.get_value(self.u, self.particle_positions[p][0], self.particle_positions[p][1])
                 v = self.get_value(self.u, self.particle_positions[p][0], self.particle_positions[p][1])
                 self.particle_velocities[p] = vec2(u, v)
@@ -188,7 +184,7 @@ class Plume2d():
     @ti.kernel
     def advect_particles(self):
         for p in ti.grouped(self.particle_positions):
-            if self.particle_type[p] == self.P_FLUID:
+            if self.particle_type[p] == CELL_FLUID:
                 pos = self.particle_positions[p]
                 pv = self.particle_velocities[p]
 
@@ -236,7 +232,7 @@ class Plume2d():
         offset_v = vec2(0.5, 0.0)
         offset_q = vec2(0.0, 0.0)
         for p in ti.grouped(self.particle_positions):
-            if self.particle_type[p] == self.P_FLUID:
+            if self.particle_type[p] == CELL_FLUID:
                 # update velocity
                 xp = self.particle_positions[p]
                 u_pic, u_flip = self.gather(self.u, self.u_last, xp, offset_u)
@@ -276,7 +272,7 @@ class Plume2d():
         offset_v = vec2(0.5, 0.0)
         offset_q = vec2(0.0, 0.0)
         for p in ti.grouped(self.particle_positions):
-            if self.particle_type[p] == self.P_FLUID:
+            if self.particle_type[p] == CELL_FLUID:
                 xp = self.particle_positions[p]
 
                 self.scatter(self.u, self.u_weight, xp, self.particle_velocities[p][0], offset_u)
@@ -481,7 +477,7 @@ class Plume2d():
 
         for i in range(self.f_y.shape[0]):
             for j in range(1, self.f_y.shape[1]-1):
-                self.f_y[i, j] += 0.1 * (self.density[i, j-1] + self.density[i,j]) / 2 * scaling
+                self.f_y[i, j] += 0.01 * (self.density[i, j-1] + self.density[i,j]) / 2 * scaling
 
     @ti.kernel
     def add_wind(self):

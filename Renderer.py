@@ -29,7 +29,7 @@ class Renderer():
                 for i in range(-1, 2):
                     for j in range(-1, 2):
                         if x+i >= 0 and x+i < self.res_x and y+j >= 0 and y+j < self.res_y:
-                            if cell[x+i, y+j] > 0:
+                            if cell[x+i, y+j] == CELL_SOLID:
                                 cnt += 1
                             tot += 1
                 if cnt > 0:

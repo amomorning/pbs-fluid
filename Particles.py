@@ -1,12 +1,11 @@
 import taichi as ti
 import utils
 from utils import vec2
+from Solid import CELL_FLUID
 import random
 
 @ti.data_oriented
 class Particles():
-    P_FLUID = 1
-    P_OTHER = 0
 
     def __init__(self, npar, res_x, res_y, dx) -> None: # n particles per edge
         
@@ -27,7 +26,7 @@ class Particles():
     def init_particles(self, cell_type):
         for i, j, ix, jx in self.positions:
             if cell_type[i, j] == utils.FLUID:
-                self.type[i, j, ix, jx] = self.P_FLUID
+                self.type[i, j, ix, jx] = CELL_FLUID
             else:
                 self.type[i, j, ix, jx] = 0
 
@@ -42,7 +41,6 @@ class Particles():
     @ti.kernel
     def update_particle_velocities(self, u: ti.template(), v:ti.template()):
         for p in ti.grouped(self.positions):
-            if self.type[p] == self.P_FLUID:
-                pv = sample_velocity(particle_positions[p], u, v)
-                self.velocities[p] = pv
+            if self.type[p] == CELL_FLUID:
+                self.velocities[p] = utils.get_value(self.positions[p], u, v)
     
