@@ -1,7 +1,7 @@
 import taichi as ti
 import numpy as np
 from MICPCGSolver import MICPCGSolver
-import utils
+from utils import PARTICLE_FLUID, PARTICLE_OTHER
 from utils import (bilerp, 
                    cerp,
                    copy_field,
@@ -15,8 +15,6 @@ import random
 @ti.data_oriented
 class Plume2d():
 
-    P_FLUID = 1
-    P_OTHER = 0
     FLIP_blending = 0.0
 
     def __init__(self, args):
@@ -101,7 +99,6 @@ class Plume2d():
             celltype.fill(1)
             self.p_solver = MICPCGSolver(self.res_x, self.res_y, self.u, self.v, cell_type=celltype, MIC_blending=0.0)
 
-        # self.init_solid()
         self.print_info()
         self.reset()
 
@@ -123,6 +120,8 @@ class Plume2d():
         elif self.solver == "MIC":
             self.solve_poisson = self.solve_poisson_MIC
 
+        self.init_particles()
+
     def print_info(self):
         print("Plume simulator starts")
         print("Parameters:")
@@ -138,10 +137,10 @@ class Plume2d():
         print("\n\n")
 
     @ti.kernel
-    def init_particles(self, cell_type: ti.template()):
+    def init_particles(self):
         for i, j, ix, jx in self.particle_positions:
             # if cell_type[i, j] == utils.FLUID:
-            self.particle_type[i, j, ix, jx] = self.P_FLUID
+            self.particle_type[i, j, ix, jx] = PARTICLE_FLUID
             # else:
             #     self.particle_type[i, j, ix, jx] = 0
 
@@ -155,7 +154,7 @@ class Plume2d():
     @ti.kernel
     def update_particle_velocities(self):
         for p in ti.grouped(self.particle_positions):
-            if self.particle_type[p] == self.P_FLUID:
+            if self.particle_type[p] == PARTICLE_FLUID:
                 u = self.get_value(self.u, self.particle_positions[p][0], self.particle_positions[p][1])
                 v = self.get_value(self.u, self.particle_positions[p][0], self.particle_positions[p][1])
                 self.particle_velocities[p] = vec2(u, v)
@@ -163,7 +162,7 @@ class Plume2d():
     @ti.kernel
     def advect_particles(self):
         for p in ti.grouped(self.particle_positions):
-            if self.particle_type[p] == self.P_FLUID:
+            if self.particle_type[p] == PARTICLE_FLUID:
                 pos = self.particle_positions[p]
                 pv = self.particle_velocities[p]
 
@@ -211,7 +210,7 @@ class Plume2d():
         offset_v = vec2(0.5, 0.0)
         offset_q = vec2(0.0, 0.0)
         for p in ti.grouped(self.particle_positions):
-            if self.particle_type[p] == self.P_FLUID:
+            if self.particle_type[p] == PARTICLE_FLUID:
                 # update velocity
                 xp = self.particle_positions[p]
                 u_pic, u_flip = self.gather(self.u, self.u_last, xp, offset_u)
@@ -251,7 +250,7 @@ class Plume2d():
         offset_v = vec2(0.5, 0.0)
         offset_q = vec2(0.0, 0.0)
         for p in ti.grouped(self.particle_positions):
-            if self.particle_type[p] == self.P_FLUID:
+            if self.particle_type[p] == PARTICLE_FLUID:
                 xp = self.particle_positions[p]
 
                 self.scatter(self.u, self.u_weight, xp, self.particle_velocities[p][0], offset_u)
@@ -696,9 +695,8 @@ class Plume2d():
             self.v_half[x, y] = 2 * self.v[x, y] - self.v_tmp[x ,y]
 
     def apply_init(self):
-        # self.apply_source(self.density, 0.45, 0.55, 0.10, 0.15, 1)
-        # self.apply_source(self.v, 0.45, 0.55, 0.10, 0.14, 1)
         self.apply_source(self.density, 0.45, 0.55, 0.10, 0.15, 1)
+        self.apply_source(self.density_last, 0.45, 0.55, 0.10, 0.15, 1)
         self.apply_source(self.v, 0.45, 0.55, 0.10, 0.14, 2)
 
     def body_force(self):
@@ -717,17 +715,18 @@ class Plume2d():
         elif self.advection == "FLIP":
             self.G2P()
             self.advect_particles()
-            # self.u.fill(0.0)
-            # self.v.fill(0.0)
-            # self.density.fill(0.0)
-            # self.u_weight.fill(0.0)
-            # self.v_weight.fill(0.0)
-            # self.density_weight.fill(0.0)
+            self.u.fill(0.0)
+            self.v.fill(0.0)
+            self.density.fill(0.0)
+            self.u_weight.fill(0.0)
+            self.v_weight.fill(0.0)
+            self.density_weight.fill(0.0)
 
             self.P2G()
             self.grid_norm()
             self.u_last.copy_from(self.u)
             self.v_last.copy_from(self.v)
+            # self.advect_MC(self.density, self.density_tmp, self.density_forward, self.density_forward, self.u, self.v)
             self.density_last.copy_from(self.density)
         else:
             self.advect_SL(self.density, self.density_tmp, self.u, self.v)

@@ -1,9 +1,8 @@
 import taichi as ti
 
 
-FLUID = 0
-AIR = 1
-SOLID = 2
+PARTICLE_FLUID = 1
+PARTICLE_OTHER = 0
 
 @ti.pyfunc
 def vec2(x, y):

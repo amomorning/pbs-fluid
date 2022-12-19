@@ -4,17 +4,17 @@ from Renderer import Renderer
 
 ti.init(arch=ti.cuda)
 
-res_x = 128
+res_x = 256
 res_y = int(res_x * 1)
 dx = 1
 dt = 0.005 * ti.sqrt((res_x + res_y) * 0.5)
 accuracy = 1e-4
 n_iters = 100
-advection = "FLIP"
+advection = "MAC"
 interpolation = "cerp"
 integration = "rk3"
 solver = "GS"
-reflecton = False
+reflecton = True
 wind = False
 
 args = {
@@ -48,7 +48,7 @@ camera = ti.ui.Camera()
 substeps = 1
 frame = 0
 
-while window.running:
+while (window.running and frame < 500):
     # if plume.t_curr > 200:
     #     # Reset
     #     plume.reset()
