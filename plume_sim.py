@@ -5,21 +5,21 @@ from Solid import SolidBox, SolidSphere
 
 ti.init(arch=ti.cuda)
 
-res_x = 128
+res_x = 256
 res_y = int(res_x * 1)
 dx = 1
 dt = 0.005 * ti.sqrt((res_x + res_y) * 0.5)
 accuracy = 1e-5
 n_iters = 100
 advection = "MAC"       # SL, MAC, FLIP
-interpolation = "cerp"  # bilerp, cerp
+interpolation = "bilerp"  # bilerp, cerp
 integration = "euler"     # euler, rk3
 solver = "GS"           
-reflecton = True        # True, False
+reflection = False        # True, False
 wind = False
 bodies = [
-    # SolidBox(.5, .6, .7, .1, -.7),
-    # SolidSphere(.7, .3, .2),
+    SolidBox(.5, .6, .7, .1, -.7),
+    SolidSphere(.7, .3, .15),
     ]
 
 args = {
@@ -34,7 +34,7 @@ args = {
     'interpolation': interpolation,    
     'integration': integration,        
     'solver': solver,
-    'reflection': reflecton,           
+    'reflection': reflection,           
     'bodies': bodies,
 }
 
@@ -76,7 +76,7 @@ while window.running:
 
     canvas.scene(scene)
     
-    window.save_image(f"./output/{advection}_{interpolation}_{integration}_{solver}_{reflecton}_{frame:05d}.png")
+    window.save_image(f"./output/{advection}_{interpolation}_{integration}_{solver}_{reflection}_{frame:05d}.png")
     window.show()
 
     frame += 1

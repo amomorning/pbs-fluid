@@ -12,21 +12,21 @@ def vec2(x, y):
 @ti.func
 def lerp(a: float, b: float, x: float):
     """
-    Linear interpolate between a and b for x ranging from 0 to 1
+    Linear intERPolate between a and b for x ranging from 0 to 1
     """
     return a * (1.0 - x) + b * x
 
 @ti.func
 def bilerp(x_weight, y_weight, x00, x10, x01, x11):
     """
-    Bilinear interpolation
+    BILinear intERPolation
     """
     return lerp(lerp(x00, x10, x_weight), lerp(x01, x11, x_weight), y_weight)
 
 @ti.func
 def cerp(x0, x1, x2, x3, w):
     """
-    Cubic INterpolation
+    Cubic intERPolation
     """
     w_sq = w * w
     w_cu = w_sq * w

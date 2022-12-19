@@ -765,7 +765,7 @@ class Plume2d():
             self.advect_SL(self.u, self.u_tmp, self.u, self.v)
             self.advect_SL(self.v, self.v_tmp, self.u, self.v)
     
-    def advect_2(self):
+    def advect_reflection(self):
         if self.advection == "MAC":
             self.advect_MC(self.density, self.density_tmp, self.density_forward, self.density_forward, self.u, self.v)
             self.advect_MC(self.u_half, self.u_tmp, self.u_forward, self.u_backward, self.u, self.v)
@@ -801,10 +801,10 @@ class Plume2d():
             self.apply_init()
             self.projection()
             self.reflect()
-            self.advect_2()
+            self.advect_reflection()
             self.body_force()
             self.projection()
-            self.advect()
+            self.advect_reflection()
             self.body_force()
             self.f_x.fill(0)
             self.f_y.fill(0)
