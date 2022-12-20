@@ -8,18 +8,18 @@ ti.init(arch=ti.cuda)
 res_x = 256
 res_y = int(res_x * 1)
 dx = 1
-dt = 0.005 * ti.sqrt((res_x + res_y) * 0.5)
+dt = 0.005 * ti.sqrt((res_x + res_y) * 0.5) *.5
 accuracy = 1e-4
 n_iters = 100
 advection = "MAC"       # SL, MAC, FLIP
 interpolation = "cerp"  # bilerp, cerp
-integration = "euler"     # euler, rk3
+integration = "rk3"     # euler, rk3
 solver = "CG"           # MIC, CG, GS 
-reflection = False        # True, False
+reflection = True        # True, False
 wind = False
 bodies = [
-    SolidBox(.5, .6, .7, .1, -.7),
-    SolidSphere(.7, .3, .15),
+    # SolidBox(.55, .45, .58, .07, -.7),
+    # SolidSphere(.7, .3, .15),
     ]
 
 args = {
@@ -51,11 +51,11 @@ canvas.set_background_color((0, 0, 0))
 scene = ti.ui.Scene()
 camera = ti.ui.Camera()
 
-substeps = 10
+substeps = 20
 frame = 0
 
 while window.running:
-    if frame > 500:
+    if frame > 1000:
         break
 
     for _ in range(substeps):
