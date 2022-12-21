@@ -7,14 +7,14 @@ ti.init(arch=ti.cuda)
 res_x = 256
 res_y = int(res_x * 1)
 dx = 1
-dt = 0.005 * ti.sqrt((res_x + res_y) * 0.5)
+dt = 0.005 * ti.sqrt((res_x + res_y) * 0.5) / 4
 accuracy = 1e-5
 n_iters = 100
-advection = "FLIP"
-interpolation = "bilinear"
+advection = "MAC"
+interpolation = "cerp"
 integration = "rk3"
 solver = "GS"
-reflecton = False
+reflecton = True
 wind = False
 
 args = {
@@ -45,10 +45,10 @@ canvas.set_background_color((0, 0, 0))
 scene = ti.ui.Scene()
 camera = ti.ui.Camera()
 
-substeps = 10
+substeps = 1
 frame = 0
 
-while (window.running and frame < 500):
+while (window.running):
     # if plume.t_curr > 200:
     #     # Reset
     #     plume.reset()
@@ -70,7 +70,7 @@ while (window.running and frame < 500):
 
     canvas.scene(scene)
     
-    window.save_image(f"./output/{advection}_{interpolation}_{integration}_{solver}_{reflecton}_{frame:05d}.png")
+    # window.save_image(f"./output/{advection}_{interpolation}_{integration}_{solver}_{reflecton}_{frame:05d}.png")
     window.show()
 
     frame += 1

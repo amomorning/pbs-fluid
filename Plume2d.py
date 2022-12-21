@@ -68,7 +68,7 @@ class Plume2d():
         self.v_half = ti.field(float, shape=(self.res_x, self.res_y+1))
 
         # Indicate if solid, 0 if solid, 1 if fluid
-        # self.solid = ti.field(float, shape=(self.res_x, self.res_y))
+        # self.celltype = ti.field(float, shape=(self.res_x, self.res_y))
 
         # settings for Conjugate Gradient method for solving poisson equation
         self.r = ti.field(float, shape=(self.res_x, self.res_y))
@@ -98,6 +98,9 @@ class Plume2d():
             celltype  = ti.field(int, shape=(self.res_x, self.res_y))
             celltype.fill(1)
             self.p_solver = MICPCGSolver(self.res_x, self.res_y, self.u, self.v, cell_type=celltype, MIC_blending=0.0)
+
+        # For solid. Fluid->1, Solid->0
+        self.celltype = ti.field(float, shape=(self.res_x, self.res_y))
 
         self.print_info()
         self.reset()
@@ -282,9 +285,8 @@ class Plume2d():
         ixmax = int(xmax * q.shape[0])
         iymin = int(ymin * q.shape[1])
         iymax = int(ymax * q.shape[1])
-        for x in range(ixmin, ixmax):
-            for y in range(iymin, iymax):
-                q[x, y] = v
+        for x, y in ti.ndrange((ixmin, ixmax), (iymin, iymax)):
+            q[x, y] = v
 
     @ti.func
     def get_offset(self, q: ti.template()):
@@ -356,8 +358,7 @@ class Plume2d():
     @ti.kernel
     def advect_SL_euler(self, q: ti.template(), q_tmp: ti.template() ,u: ti.template(), v: ti.template()):
         ox, oy = self.get_offset(q)
-        for iy in range(q.shape[1]):
-            for ix in range(q.shape[0]):
+        for iy, ix in self.q:
                 # Current position
                 x = ix + ox
                 y = iy + oy
@@ -371,13 +372,10 @@ class Plume2d():
         copy_field(q_tmp, q)
 
     
-    
-    
     @ti.kernel
     def advect_SL_rk3(self,q: ti.template(), q_tmp: ti.template() , u: ti.template(), v: ti.template()):
         ox, oy = self.get_offset(q)
-        for iy in range(q.shape[1]):
-            for ix in range(q.shape[0]):
+        for iy, ix in self.q:
                 x = ix + ox
                 y = iy + oy
 
@@ -409,15 +407,15 @@ class Plume2d():
 
     @ti.kernel
     def MC_correct(self, q: ti.template(), q_tmp: ti.template(), q_forward: ti.template(), q_backward: ti.template()):
-        qmin = 1e-10
-        qmax = 1e10
+        qmin = -1e4
+        qmax = 1e4
         for x, y in q:
             q_tmp[x, y] = q_forward[x, y] - 0.5 * (q_backward[x, y] - q[x, y])
             # Clamping will make the smoke not symmetric
-            # if q_tmp[x, y] < qmin:
-            #     q_tmp[x, y] = qmin
-            # if q_tmp[x, y] > qmax:
-            #     q_tmp[x, y] = qmax
+            if q_tmp[x, y] < qmin:
+                q_tmp[x, y] = qmin
+            if q_tmp[x, y] > qmax:
+                q_tmp[x, y] = qmax
         
         copy_field(q_tmp, q)
     
@@ -425,8 +423,10 @@ class Plume2d():
         self.copy_to(q, q_forward)
         self.copy_to(q, q_backward)
         self.advect_SL(q_forward, q_tmp, u, v)
+        self.set_zero()
         self.dt *= -1
         self.advect_SL(q_backward, q_tmp, u, v)
+        self.set_zero()
         self.dt *= -1
 
         self.MC_correct(q, q_tmp, q_forward, q_backward)
@@ -477,6 +477,14 @@ class Plume2d():
         u at x=0 and x=res_x is zero
         v at y=0 and y=res_y is zero
         """
+        # for x, y in self.u:
+        #     if self.celltype[x-1, y] == 0 or self.celltype[x, y] == 0:
+        #         self.u[x, y] = 0
+
+        # for x, y in self.v:
+        #     if self.celltype[x, y-1] == 0 or self.celltype[x, y] == 0:
+        #         self.v[x, y] = 0 
+
         sx = self.u.shape[0]
         sy = self.u.shape[1]
         for y in range(sy):
@@ -489,22 +497,39 @@ class Plume2d():
             self.v[x, 0] = 0
             self.v[x, sy-1] = 0
 
-    # @ti.func
-    # def set_pressure(self, x: int, y: int, rhs: float):
-    #     """
-    #     Set the pressure with Neumann condition
-    #     """
-    #     numerator = rhs + self.pressure[x-1, y] * self.solid[x-1, y] + self.pressure[x+1, y] * self.solid[x+1, y] + self.pressure[x, y-1] * self.solid[x, y-1]+ self.pressure[x, y+1] * self.solid[x, y+1]
-    #     denominator = self.solid[x-1, y] + self.solid[x+1, y] + self.solid[x, y-1] + self.solid[x, y+1]
-    #     if denominator == 0:
-    #         self.pressure[x, y] = 0
-    #     else:
-    #         self.pressure[x, y] = numerator / denominator
+    @ti.func
+    def set_pressure(self, x: int, y: int, rhs: float):
+        """
+        Set the pressure with Neumann condition
+        """
+        numerator = rhs + self.pressure[x-1, y] * self.celltype[x-1, y] \
+                        + self.pressure[x+1, y] * self.celltype[x+1, y] \
+                        + self.pressure[x, y-1] * self.celltype[x, y-1] \
+                        + self.pressure[x, y+1] * self.celltype[x, y+1]
+        denominator = self.celltype[x-1, y] + self.celltype[x+1, y] + self.celltype[x, y-1] + self.celltype[x, y+1]
+        self.pressure[x, y] = numerator / (denominator + 1e-32)
 
     @ti.kernel
+    def update_pressure(self, dx2: float, rho: float) -> float :
+        for y in range(0, self.res_y):
+            for x in range(0, self.res_x):
+                b = -self.divergence[x, y] / self.dt * rho
+                # Update in place
+                # self.set_pressure(x, y, dx2 * b)
+                self.pressure[x,y] = (dx2 * b + self.pressure[x-1, y] + self.pressure[x+1, y] + self.pressure[x, y-1] + self.pressure[x, y+1]) / 4
+
+        # Compute the new residual, i.e. the sum of the squares of the individual residuals (squared L2-norm)
+        residual = 0
+        for y in range(0, self.res_y):
+            for x in range(0, self.res_x):
+                b = -self.divergence[x,y] / self.dt * rho
+                cell_residual = b - (4 * self.pressure[x, y] - self.pressure[x-1, y] - self.pressure[x+1, y] - self.pressure[x, y-1] - self.pressure[x, y+1]) / dx2 
+                residual += cell_residual ** 2
+        return residual
+
     def solve_poisson_GS(self):
         """
-        Solve the Poisson equation for pressure using Gauss-Siedel method.
+        Solve the Poisson equation for pressure using Gauss-Seidel method.
         """
         dx2 = self.dx * self.dx
         residual = self.acc + 1
@@ -512,21 +537,8 @@ class Plume2d():
         it = 0
 
         while residual > self.acc and it < self.max_iters:
-            for y in range(0, self.res_y):
-                for x in range(0, self.res_x):
-                    b = -self.divergence[x, y] / self.dt * rho
-                    # Update in place
-                    # self.set_pressure(x, y, dx2 * b)
-                    self.pressure[x,y] = (dx2 * b + self.pressure[x-1, y] + self.pressure[x+1, y] + self.pressure[x, y-1] + self.pressure[x, y+1]) / 4
-
-            # Compute the new residual, i.e. the sum of the squares of the individual residuals (squared L2-norm)
-            residual = 0
-            for y in range(0, self.res_y):
-                for x in range(0, self.res_x):
-                    b = -self.divergence[x,y] / self.dt * rho
-                    cell_residual = b - (4 * self.pressure[x, y] - self.pressure[x-1, y] - self.pressure[x+1, y] - self.pressure[x, y-1] - self.pressure[x, y+1]) / dx2 
-                    residual += cell_residual ** 2
-
+            
+            residual = self.update_pressure(dx2, rho)
             residual = ti.sqrt(residual)
             residual /= self.res_x * self.res_y
 
@@ -669,6 +681,7 @@ class Plume2d():
         self.v_backward.fill(0)
         self.f_x.fill(0)
         self.f_y.fill(0)
+        self.celltype.fill(1)
         self.t_curr = 0
         self.n_steps = 0
         self.apply_init()
@@ -682,9 +695,9 @@ class Plume2d():
             self.v_half[x, y] = 2 * self.v[x, y] - self.v_tmp[x ,y]
 
     def apply_init(self):
-        self.apply_source(self.density, 0.45, 0.55, 0.10, 0.15, 1)
-        self.apply_source(self.density_last, 0.45, 0.55, 0.10, 0.15, 1)
-        self.apply_source(self.v, 0.45, 0.55, 0.10, 0.11, 1)
+        self.apply_source(self.density, 0.45, 0.55, 0.14, 0.15, 1)
+        self.apply_source(self.density_last, 0.45, 0.55, 0.14, 0.15, 1)
+        self.apply_source(self.v, 0.45, 0.55, 0.14, 0.15, 2)
 
     def body_force(self):
         self.add_buoyancy()
@@ -738,6 +751,7 @@ class Plume2d():
 
     def projection(self):
         # Prepare the Poisson equation (r.h.s)
+        self.set_zero()
         compute_divergence(self.divergence, self.u, self.v, self.dx)
 
         # Projection step
@@ -756,6 +770,7 @@ class Plume2d():
             self.apply_init()
             self.projection()
             self.reflect()
+            self.set_zero()
             self.advect_2()
             self.body_force()
             self.projection()
