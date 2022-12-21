@@ -8,13 +8,13 @@ res_x = 256
 res_y = int(res_x * 1)
 dx = 1
 dt = 0.005 * ti.sqrt((res_x + res_y) * 0.5)
-accuracy = 1e-4
+accuracy = 1e-5
 n_iters = 100
-advection = "MAC"
-interpolation = "cerp"
+advection = "FLIP"
+interpolation = "bilinear"
 integration = "rk3"
 solver = "GS"
-reflecton = True
+reflecton = False
 wind = False
 
 args = {
@@ -45,7 +45,7 @@ canvas.set_background_color((0, 0, 0))
 scene = ti.ui.Scene()
 camera = ti.ui.Camera()
 
-substeps = 1
+substeps = 10
 frame = 0
 
 while (window.running and frame < 500):
@@ -70,7 +70,7 @@ while (window.running and frame < 500):
 
     canvas.scene(scene)
     
-    # window.save_image(f"./output/{advection}_{interpolation}_{integration}_{solver}_{reflecton}_{frame:05d}.png")
+    window.save_image(f"./output/{advection}_{interpolation}_{integration}_{solver}_{reflecton}_{frame:05d}.png")
     window.show()
 
     frame += 1

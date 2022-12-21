@@ -208,7 +208,7 @@ class Plume2d():
     def G2P(self):
         offset_u = vec2(0.0, 0.5)
         offset_v = vec2(0.5, 0.0)
-        offset_q = vec2(0.0, 0.0)
+        offset_q = vec2(0.5, 0.5)
         for p in ti.grouped(self.particle_positions):
             if self.particle_type[p] == PARTICLE_FLUID:
                 # update velocity
@@ -248,7 +248,7 @@ class Plume2d():
     def P2G(self):
         offset_u = vec2(0.0, 0.5)
         offset_v = vec2(0.5, 0.0)
-        offset_q = vec2(0.0, 0.0)
+        offset_q = vec2(0.5, 0.5)
         for p in ti.grouped(self.particle_positions):
             if self.particle_type[p] == PARTICLE_FLUID:
                 xp = self.particle_positions[p]
@@ -334,12 +334,12 @@ class Plume2d():
         #int index for calculating cerp
         x0 = max(ix - 1, 0)
         x1 = ix
-        x2 = ix + 1
+        x2 = min(ix + 1, sx - 1)
         x3 = min(ix + 2, sx - 1)
 
         y0 = max(iy - 1, 0)
         y1 = iy
-        y2 = iy + 1
+        y2 = min(iy + 1, sy - 1)
         y3 = min(iy + 2, sy - 1)
 
         q0 = cerp(q[x0,y0], q[x1,y0], q[x2,y0],q[x3,y0], x_weight)
@@ -348,19 +348,6 @@ class Plume2d():
         q3 = cerp(q[x0,y3], q[x1,y3], q[x2,y3],q[x3,y3], x_weight)
 
         return cerp(q0,q1,q2,q3,y_weight)
-
-    # @ti.kernel
-    # def init_solid(self):
-    #     self.solid.fill(1)
-
-    #     ixmin = int(0.45 * self.res_x)
-    #     ixmax = int(0.55 * self.res_x)
-    #     iymin = int(0.45 * self.res_y)
-    #     iymax = int(0.55 * self.res_y)
-
-    #     for x in range(ixmin, ixmax):
-    #         for y in range(iymin, iymax):
-    #             self.solid[x, y] = 0
 
     @ti.kernel
     def copy_to(self, tmp: ti.template(), v: ti.template()):
@@ -697,7 +684,7 @@ class Plume2d():
     def apply_init(self):
         self.apply_source(self.density, 0.45, 0.55, 0.10, 0.15, 1)
         self.apply_source(self.density_last, 0.45, 0.55, 0.10, 0.15, 1)
-        self.apply_source(self.v, 0.45, 0.55, 0.10, 0.14, 2)
+        self.apply_source(self.v, 0.45, 0.55, 0.10, 0.11, 1)
 
     def body_force(self):
         self.add_buoyancy()
