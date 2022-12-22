@@ -113,7 +113,9 @@ The MacCormack algorithm is simple but greatly reduce the error induced by Semi-
 ![](res/MacCormack.png)
 
 ### FLIP/PIC
-<!-- TODO -->
+This simple but efficient algorithm provides great improvement to the visual effect. However, due to our incomplete understanding on Taichi, we only have an incomplete version of FLIP. 
+
+Please refer to [Fluid_Simulation_for_Computer_Graphics_Second_Edition.pdf](http://wiki.cgt3d.cn/mediawiki/images/4/43/Fluid_Simulation_for_Computer_Graphics_Second_Edition.pdf) chapter 7 and [tunabrain/incremental-fluids: Simple, single-file fluid solvers for learning purposes (github.com)](https://github.com/tunabrain/incremental-fluids). 
 
 ## Apply Body Forces
 This step is fairly easy. Just update the velocity using Euler method
@@ -121,14 +123,64 @@ This step is fairly easy. Just update the velocity using Euler method
 Remember to set the boundary condition for velocity after this step
 
 ## Projection
-<!-- TODO -->
+The `project` routine will substract off the pressure gradient from the intermediate velocity field $\mathbf{u}$:
+$$
+\mathbf{u}^{n+1} = \mathbf{u} - \Delta t \frac{1}{\rho}\nabla p
+$$
+so that the result satisfies incompressibility inside the fluid
+$$
+\nabla \cdot \mathbf{u}^{n+1} = 0
+$$
+and satisfies the solid wall boundary conditions
+$$
+\mathbf{u}^{n+1} \cdot \mathbf{n} = \mathbf{u}_{\text{solid}}\cdot \mathbf{n}
+$$
+
+Using the central difference approximations the update rule is 
+$$
+\begin{aligned}
+&u_{i+1 / 2, j}^{n+1}=u_{i+1 / 2, j}-\Delta t \frac{1}{\rho} \frac{p_{i+1, j}-p_{i, j}}{\Delta x} \\
+&v_{i, j+1 / 2}^{n+1}=v_{i, j+1 / 2}-\Delta t \frac{1}{\rho} \frac{p_{i, j+1}-p_{i, j}}{\Delta x}
+\end{aligned}
+$$
+and in 3D
+$$
+\begin{aligned}
+&u_{i+1 / 2, j, k}^{n+1}=u_{i+1 / 2, j, k}-\Delta t \frac{1}{\rho} \frac{p_{i+1, j, k}-p_{i, j, k}}{\Delta x} \\
+&v_{i, j+1 / 2, k}^{n+1}=v_{i, j+1 / 2, k}-\Delta t \frac{1}{\rho} \frac{p_{i, j+1, k}-p_{i, j, k}}{\Delta x} \\
+&w_{i, j, k+1 / 2}^{n+1}=w_{i, j, k+1 / 2}-\Delta t \frac{1}{\rho} \frac{p_{i, j, k+1}-p_{i, j, k}}{\Delta x}
+\end{aligned}
+$$
+
+However the pressure we use in the `project` routine must make $\mathbf{u}^{n+1}$ divergence-free and satisfies the boundary conditions. We will see later this turns out to be a liner system on $p$ with constraints.
+
+**The boundary conditions for pressure:**
+- Free surface:
+Since we assume that the pressure is simply zero outside the fluid, we replace the $p_{i,j,k}$'s that lie in air cells with zero.
+- Solid walls:
+The condition on pressure on solid walls comes from the condition on velocity. Supposing grid cell $(i,j)$ was fluid and grid cell $(i+1,j)$ was solid, we would update $u_{i+1/2,j}$ with 
+$$
+u_{i+1 / 2, j}^{n+1}=u_{i+1 / 2, j}-\Delta t \frac{1}{\rho} \frac{p_{i+1, j}-p_{i, j}}{\Delta x}
+$$
+rearrange it and replace $u_{i+1 / 2, j}^{n+1}$ with $u_{\text{solid}}$, we have boundary condition on $p$:
+$$
+p_{i+1, j}=p_{i, j}+\frac{\rho \Delta x}{\Delta t}\left(u_{i+1 / 2, j}-u_{\text {solid }}\right)
+$$
+
+Now we can formulate the `project` step. Plug $\mathbf{u}^{n+1} = \mathbf{u} - \Delta t \frac{1}{\rho}\nabla p$ into $\nabla \cdot\mathbf{u}^{n+1} = 0$, we have 
+$$
+\nabla \cdot\left( \mathbf{u} - \Delta t \frac{1}{\rho} \nabla p \right) = 0 
+\iff \frac{\Delta t}{\rho} \nabla^{2} p = \nabla \cdot \mathbf{u}
+$$
+which is a Poisson equation. We need to solve it with boundary conditions on $p$. Please refer to [FLUID SIMULATION SIGGRAPH 2007 Course Notes](https://www.cs.ubc.ca/~rbridson/fluidsimulation/fluids_notes.pdf) for details. 
 
 
 ## Advection-Reflection
 <!-- TODO -->
 
-## Known Bugs
-<!-- TODO -->
+## Known Issues
+- FLIP for now couldn't cooperate with solid
+- MIC solver is extremely slow
 
 ## Reference
 
