@@ -1,8 +1,6 @@
 import taichi as ti
-import numpy as np
 from Solid import CELL_FLUID, CELL_SOLID, CELL_AIR
 from MICPCGSolver import MICPCGSolver
-from utils import PARTICLE_FLUID, PARTICLE_OTHER
 from utils import (bilerp, 
                    cerp,
                    copy_field,
@@ -95,8 +93,6 @@ class Plume2d():
                 
                 if dx > 0.45 and dx < 0.55 and dy > 0.10 and dy < 0.15:
                     self._cell[x, y] = CELL_FLUID
-
-
 
         # For particles
         self.particle_positions = ti.Vector.field(2, dtype=ti.f32, shape=(self.res_x, self.res_y, self.npar, self.npar))
@@ -198,51 +194,20 @@ class Plume2d():
                     pv[1] = 0
                 if pos[1] >= self.res_y - self.dx:  # top boundary
                     pos[1] = self.res_y - self.dx
-                    pv[1] = 0
-
-                if len(self.bodies) != 0:
-                    for body in self.bodies:
-                        d = 0.0
-                        d = ti.min(d, body.distance(pos[0], pos[1]))
-                        if d < 0.0:
-                            pos[0], pos[1] = body.closestSurfacePoint(pos[0], pos[1])
-
+                    pv[1] = 0                  
 
                 self.particle_positions[p] = pos
                 self.particle_velocities[p] = pv
 
-    @ti.func
-    def gather(self, grid_v, grid_vlast, xp, offset):
-        inv_dx = vec2(1.0 / self.dx, 1.0 / self.dx).cast(ti.f32)
-        base = (xp * inv_dx - (offset + 0.5)).cast(ti.i32)
-        fx = xp * inv_dx - (base.cast(ti.f32) + offset)
-
-        w = [0.5*(1.5-fx)**2, 0.75-(fx-1)**2, 0.5*(fx-0.5)**2] # Bspline
-
-        v_pic = 0.0
-        v_flip = 0.0
-
-        for i in ti.static(range(3)):
-            for j in ti.static(range(3)):
-                neighbor = vec2(i, j)
-                weight = w[i][0] * w[j][1]
-                v_pic += weight * grid_v[base + neighbor]
-                v_flip += weight * (grid_v[base + neighbor] - grid_vlast[base + neighbor])
-
-        return v_pic, v_flip
-
     @ti.kernel
     def G2P(self):
-        offset_u = vec2(0.0, 0.5)
-        offset_v = vec2(0.5, 0.0)
-        offset_q = vec2(0.5, 0.5)
         for p in ti.grouped(self.particle_positions):
             if self.particle_type[p] == CELL_FLUID:
                 # update velocity
                 xp = self.particle_positions[p]
-                u_pic, u_flip = self.gather(self.u, self.u_last, xp, offset_u)
-                v_pic, v_flip = self.gather(self.v, self.v_last, xp, offset_v)
-                q_pic, q_flip = self.gather(self.density, self.density_last, xp, offset_q)
+                u_pic, u_flip = self.get_value(self.u, xp[0], xp[1]), self.get_value(self.u, xp[0], xp[1]) - self.get_value(self.u_last, xp[0], xp[1])
+                v_pic, v_flip = self.get_value(self.v, xp[0], xp[1]), self.get_value(self.v, xp[0], xp[1]) - self.get_value(self.v_last, xp[0], xp[1])
+                q_pic, q_flip = self.get_value(self.density, xp[0], xp[1]), self.get_value(self.density, xp[0], xp[1]) - self.get_value(self.density_last, xp[0], xp[1])
 
                 new_v_pic = vec2(u_pic, v_pic)
                 new_q_pic = q_pic
@@ -500,14 +465,7 @@ class Plume2d():
     def set_boundary_condition(self):
         """
         Velocity boundary condition
-        u at x=0 and x=res_x is zero
-        v at y=0 and y=res_y is zero
         """
-        
-        # for x, y in self._cell:
-        #     if self._cell[x, y] == CELL_SOLID:
-        #         self.u[x, y] = 0
-        #         self.v[x, y] = 0
 
         for x, y in self.u:
             self.u[x, y] *= self._cell[x, y] * self._cell[x-1, y]
@@ -580,107 +538,6 @@ class Plume2d():
 
             it += 1
         print(f"Poisson residual {residual}, takes {it} iterations")
-
-    
-    @ti.kernel
-    def solve_poisson_CG(self): # trivial jacobian preconditioner
-        dx2 = self.dx * self.dx
-        #residual = self.acc + 1
-        rho = 1 
-        self.x.fill(0)
-        self.q.fill(0)
-        self.r.fill(0)
-        self.d.fill(0)
-
-        for i in range(0, self.res_y): 
-            for j in range(0, self.res_x):
-                r = - 1.0 *  self.divergence[i, j] / self.dt
-                # r =  b(rhs) - Ax
-                r -= (4.0 * self.x[i,j]  - self.x[i-1, j] - self.x[i+1, j] - self.x[i, j-1] - self.x[i, j+1]) / dx2
-
-                self.r[i,j] = r
-                self.d[i,j] = r / 4.0 # self.d = z
-                self.q[i,j] = self.d[i,j]
-
-        delta_new = 0.0
-        for i in range(0, self.res_y): 
-            for j in range(0, self.res_x):
-                delta_new += self.r[i,j] * self.r[i,j]
-        delta_0 =  delta_new
-
-        it = 0
-        beta = 0.0
-        delta_old = 1.0
-        residual = 1.0
-        alpha = 0.0
-
-        self.Ap.fill(0)
-
-        while it < self.max_iters and residual > 1e-4: #self.acc
-            # version2, add jacobian preconditioner
-            delta_new = 0.0
-            
-            # rz_old = r_T * z
-            for i in range(0, self.res_y): 
-                for j in range(0, self.res_x):
-                    delta_new += self.r[i,j] * self.d[i,j]
-            # print(f"delta of res {delta_new}")
-            # beta = delta_new/delta_old          
-
-            #  Ad = A.dot(q)
-            for i in range(0, self.res_y): 
-                for j in range(0, self.res_x):
-                    self.Ap[i,j] = 4.0 * self.q[i,j]  - self.q[i-1, j] - self.q[i+1, j] - self.q[i, j-1] - self.q[i, j+1]
-
-            denom_a = 0.0
-            for i in range(0, self.res_y): 
-                for j in range(0, self.res_x):
-                    denom_a += self.q[i,j] * self.Ap[i,j]
-
-            # rz_old / np.dot(np.transpose(d),Ad)
-            alpha = delta_new/denom_a
-
-            for i in range(0, self.res_y): 
-                for j in range(0, self.res_x):
-                    self.x[i,j] += alpha * self.q[i,j]
-
-
-            
-            for i in range(0, self.res_y): 
-                for j in range(0, self.res_x):
-                    self.r[i,j] -= alpha * self.Ap[i,j]
-
-            # z = Minv * r
-            for i in range(0, self.res_y): 
-                for j in range(0, self.res_x):
-                    self.d[i,j] = self.r[i,j] / 4.0
-
-
-            delta_old = delta_new
-            delta_new = 0.0
-            for i in range(0, self.res_y): 
-                for j in range(0, self.res_x):
-                    delta_new += self.r[i,j] * self.d[i,j]
-
-            beta = delta_new/delta_old
-
-            for i in range(0, self.res_y): 
-                for j in range(0, self.res_x):
-                    self.q[i,j] = self.d[i,j] + beta * self.q[i,j]
-
-            residual = 0
-            for y in range(0, self.res_y):
-                for x in range(0, self.res_x):
-                    b = -dx2 * self.divergence[x,y] / self.dt * rho
-                    cell_residual = b - (4 * self.x[x, y] - self.x[x-1, y] - self.x[x+1, y] - self.x[x, y-1] - self.x[x, y+1])  
-                    residual += cell_residual ** 2
-
-            residual = ti.sqrt(residual)
-            residual /= self.res_x * self.res_y
-
-            it += 1
-            print(f"Poisson CG residual {residual}, takes {it} iterations")
-        copy_field(self.x, self.pressure)
 
     def solve_poisson_MIC(self):
         scale_A = self.dt / (self.dx * self.dx)
@@ -760,7 +617,6 @@ class Plume2d():
             self.grid_norm()
             self.u_last.copy_from(self.u)
             self.v_last.copy_from(self.v)
-            # self.advect_MC(self.density, self.density_tmp, self.density_forward, self.density_forward, self.u, self.v)
             self.density_last.copy_from(self.density)
         else:
             self.advect_SL(self.density, self.density_tmp, self.u, self.v)

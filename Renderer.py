@@ -69,9 +69,7 @@ class Renderer():
                 c = (q[x0, y0] + q[x0, y1] + q[x1, y0] + q[x1, y1]) / 4
                 t = self.cell[x1, y1]
                 self.C[x + y * (self.res_x + 1)].xyz = c*(1.-t)+.1*t, c*(1.-t)+.56*t, c*(1.-t)+.49*t
-
-
-        
+ 
     @ti.kernel
     def get_color_scaled(self, cmin: float, cmax: float, c1: ti.types.vector(3, float), c2: ti.types.vector(3, float)):
         for i in self.C:
@@ -79,6 +77,10 @@ class Renderer():
             g = ti.min(ti.max(ti.abs(self.C[i].y - cmin), 0), cmax - cmin) / (cmax - cmin) * (c2[1] - c1[1]) + c1[1]
             b = ti.min(ti.max(ti.abs(self.C[i].z - cmin), 0), cmax - cmin) / (cmax - cmin) * (c2[2] - c1[2]) + c1[2]
             self.C[i].xyz = r, g, b    
+            # if self.C[i].x ** 2 + self.C[i].y ** 2 + self.C[i].z ** 2 < 0.01: 
+            #     self.C[i].xyz = 0.0, 0.0, 0.0
+            # elif self.C[i].x ** 2 + self.C[i].y ** 2 + self.C[i].z ** 2 > 0.99:
+            #     self.C[i].xyz = 1.0, 1.0, 1.0
 
     def render(self, q: ti.template(), c1: ti.types.vector(3, float), c2: ti.types.vector(3, float)):
         self.get_color_raw(q)

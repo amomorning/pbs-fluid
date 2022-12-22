@@ -43,9 +43,10 @@ class MICPCGSolver:
         #scale_A for dt/(rho * dx2)
         for i in range(0, self.res_y): 
             for j in range(0, self.res_x):
-                if self.cell_type[i, j] == CELL_FLUID:
-                    self.b[i,j] = -1 * scale_b * (self.u[i + 1, j] - self.u[i, j] + self.v[i, j + 1] - self.v[i, j]) 
-                    # compute for the div(can be replace by self.div)
+                # if self.cell_type[i, j] == CELL_FLUID:
+                    # self.b[i,j] = -1 * scale_b * (self.u[i + 1, j] - self.u[i, j] + self.v[i, j + 1] - self.v[i, j]) 
+                self.b[i,j] = -1 * scale_b * (self.u[i + 1, j] - self.u[i, j] + self.v[i, j + 1] - self.v[i, j]) * self.cell_type[i,j]
+                    
 
         #modify right hand side of linear system to account for solid velocities
         #currently hard code solid velocities to zero
@@ -197,40 +198,41 @@ class MICPCGSolver:
         sum = 0.0
         for i in range(0, self.res_y): 
             for j in range(0, self.res_x):
-                if self.cell_type[i, j] == CELL_FLUID:
-                    sum += p[i, j] * q[i, j]
+                # if self.cell_type[i, j] == CELL_FLUID:
+                #     sum += p[i, j] * q[i, j]
+                sum += p[i, j] * q[i, j] * self.cell_type[i,j]
         return sum
 
     @ti.kernel
     def compute_As(self):
         for i in range(0, self.res_y): 
-                for j in range(0, self.res_x):
-                    if self.cell_type[i, j] == CELL_FLUID:
-                        self.As[i, j] = self.Adiag[i, j] * self.s[i, j] + self.Ax[
-                            i - 1, j] * self.s[i - 1, j] + self.Ax[i, j] * self.s[
-                                i + 1, j] + self.Ay[i, j - 1] * self.s[
-                                    i, j - 1] + self.Ay[i, j] * self.s[i, j + 1]
+            for j in range(0, self.res_x):
+                    # if self.cell_type[i, j] == CELL_FLUID:
+                self.As[i, j] = (self.Adiag[i, j] * self.s[i, j] + self.Ax[\
+                    i - 1, j] * self.s[i - 1, j] + self.Ax[i, j] * self.s[\
+                        i + 1, j] + self.Ay[i, j - 1] * self.s[\
+                            i, j - 1] + self.Ay[i, j] * self.s[i, j + 1]) * self.cell_type[i,j]
 
     @ti.kernel
     def update_p(self):
         for i in range(0, self.res_y): 
-                for j in range(0, self.res_x):
-                    if self.cell_type[i, j] == CELL_FLUID:
-                        self.p[i, j] = self.p[i, j] + self.alpha * self.s[i, j]
+            for j in range(0, self.res_x):
+                    # if self.cell_type[i, j] == CELL_FLUID:
+                self.p[i, j] = (self.p[i, j] + self.alpha * self.s[i, j]) * self.cell_type[i,j]
 
     @ti.kernel
     def update_r(self):
         for i in range(0, self.res_y): 
-                for j in range(0, self.res_x):
-                    if self.cell_type[i, j] == CELL_FLUID:
-                        self.r[i, j] = self.r[i, j] - self.alpha * self.As[i, j]
+            for j in range(0, self.res_x):
+                    # if self.cell_type[i, j] == CELL_FLUID:
+                self.r[i, j] = (self.r[i, j] - self.alpha * self.As[i, j]) * self.cell_type[i,j]
 
     @ti.kernel
     def update_s(self):
         for i in range(0, self.res_y): 
             for j in range(0, self.res_x):
-                if self.cell_type[i, j] == CELL_FLUID:
-                  self.s[i, j] = self.z[i, j] + self.beta * self.s[i, j]
+                # if self.cell_type[i, j] == CELL_FLUID:
+                self.s[i, j] = (self.z[i, j] + self.beta * self.s[i, j]) * self.cell_type[i,j]
 
     @ti.kernel
     def applyPreconditioner(self):
@@ -238,12 +240,12 @@ class MICPCGSolver:
         for _ in range(1):
             for i in range(0, self.res_y): 
                 for j in range(0, self.res_x):
-                    if self.cell_type[i, j] == CELL_FLUID:
-                        t = self.r[i, j] - self.Ax[i - 1, j] * self.precon[
-                            i - 1, j] * self.q[i - 1, j] - self.Ay[
-                                i, j - 1] * self.precon[i, j - 1] * self.q[i, j - 1]
+                    # if self.cell_type[i, j] == CELL_FLUID:
+                    t = (self.r[i, j] - self.Ax[i - 1, j] * self.precon[\
+                        i - 1, j] * self.q[i - 1, j] - self.Ay[\
+                            i, j - 1] * self.precon[i, j - 1] * self.q[i, j - 1]) * self.cell_type[i,j]
 
-                        self.q[i, j] = t * self.precon[i, j]
+                    self.q[i, j] = t * self.precon[i, j]
 
         # next solve LTz = q
         for _ in range(1):
@@ -252,9 +254,9 @@ class MICPCGSolver:
                     i = self.res_x - 1 - ix
                     j = self.res_y - 1 - iy
 
-                    if self.cell_type[i, j] == CELL_FLUID:
-                        t = self.q[i, j] - self.Ax[i, j] * self.precon[
-                            i, j] * self.z[i + 1, j] - self.Ay[i, j] * self.precon[
-                                i, j] * self.z[i, j + 1]
+                    # if self.cell_type[i, j] == CELL_FLUID:
+                    t = (self.q[i, j] - self.Ax[i, j] * self.precon[\
+                        i, j] * self.z[i + 1, j] - self.Ay[i, j] * self.precon[\
+                            i, j] * self.z[i, j + 1]) * self.cell_type[i,j]
 
-                        self.z[i, j] = t * self.precon[i, j]
+                    self.z[i, j] = t * self.precon[i, j]
