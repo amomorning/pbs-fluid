@@ -176,7 +176,17 @@ which is a Poisson equation. We need to solve it with boundary conditions on $p$
 
 
 ## Advection-Reflection
-<!-- TODO -->
+Advection-Projection method is pervasive in fluid simulation field thanks to its simiplicity, efficiency and stability. However, its exhibiting energy dissipation imposes huge influence on the virtual comlexity of simulation results, for instance, the rapid decay of small vortices and turbulences. Much efforts have been spared to reduce this energy loss, where a advection-reflection method proposed by Thomaszewski occurs to be fairly simple and intuitive (refer to [An Advection-Reflection Solver for Detail-Preserving Fluid Simulation](https://jzehnder.me/publications/advectionReflection/)). Generally speaking, this method uses a energy-preserving reflection towars the divergence free manifold halfway through the timestepping of advection based on idea of "over-compensate" to achieve a two order reduction in energy loss. Besides, it also integrates seamlessly with existing projection-advection solvers and is agnostic to the choice of advection shceme.
+
+**Reflection Solver**
+> - $\widetilde{\textbf{u}}^{1/2} = A (\textbf{u}^{0}; \textbf{u}^{0}, \frac{1}{2}\Delta t)$
+> - ${\textbf{u}}^{1/2} = P \widetilde{\textbf{u}}^{\frac{1}{2}}$
+> - $\widehat{\textbf{u}}^{1/2} = 2{\textbf{u}}^{1/2} - \widetilde{\textbf{u}}^{1/2}$
+> - $\widetilde{\textbf{u}}^{1} = A(\widehat{\textbf{u}}^{1/2}; \textbf{u}^{1/2}, \frac{1}{2}\Delta t)$
+> - ${\textbf{u}}^{1} = P \widetilde{\textbf{u}}^{1}$
+
+where $\widetilde{\textbf{u}}^{1/2}, {\textbf{u}}^{1/2}, \widehat{\textbf{u}}^{1/2}$ denotes for just-advected field, projected div-free field and "over-compensate" reflected field, respectively. A decrease in dissipated energy is anticipated during this step, which can be validated by an increased virtual complexity in the simulation.
+
 
 ## Known Issues
 - FLIP for now couldn't cooperate with solid
