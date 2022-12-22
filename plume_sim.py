@@ -10,8 +10,8 @@ from Solid import SolidBox, SolidSphere
 @click.option('-x', '--res_x', default=256, help='Resolution x', show_default=True)
 @click.option('-y', '--res_y', default=256, help='Resolution y', show_default=True)
 @click.option('--dx', default=1, help='dx', show_default=True)
-@click.option('--dt', default=0.002, help='dt', show_default=True)
-@click.option('--accuracy', default=1e-4, help='accuracy', show_default=True)
+@click.option('--dt', default=0.02, help='dt', show_default=True)
+@click.option('--accuracy', default=1e-5, help='accuracy', show_default=True)
 @click.option('--n_iters', default=100, help='number of iterations', show_default=True) #TODO
 @click.option('--substeps', default=20, help='number of substeps', show_default=True)
 @click.option('-a', '--advection', default='MAC', type=click.Choice(['MAC', 'SL', 'FLIP'], case_sensitive=False), help='advection method', show_default=True)
@@ -70,8 +70,8 @@ def main(gpu, res_x, res_y, dx, dt, accuracy, n_iters,
         renderer.render(plume.density, ti.Vector([0,0,0]), ti.Vector([1,1,1]))
 
 
-        camera.position(plume.res_x / 2, plume.res_y / 2, 300)
-        camera.lookat(plume.res_x / 2, plume.res_y / 2, 0)
+        camera.position(plume.res_x * dx / 2, plume.res_y * dx / 2, 300 * res_x / 256)
+        camera.lookat(plume.res_x * dx / 2, plume.res_y * dx / 2, 0)
         scene.set_camera(camera)
 
         scene.ambient_light((1, 1, 1))

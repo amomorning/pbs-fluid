@@ -118,7 +118,7 @@ class MICPCGSolver:
         # print("successfully init PCG")
 
     def solve(self, max_iters):
-        tol = 1e-5 #set tolerance
+        tol = 1e-4 #set tolerance
 
         self.p.fill(0.0)
         self.As.fill(0.0)

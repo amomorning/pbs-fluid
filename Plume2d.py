@@ -68,9 +68,6 @@ class Plume2d():
         self.u_half = ti.field(float, shape=(self.res_x+1, self.res_y))
         self.v_half = ti.field(float, shape=(self.res_x, self.res_y+1))
 
-        # Indicate if solid, 0 if solid, 1 if fluid
-        # self.celltype = ti.field(float, shape=(self.res_x, self.res_y))
-
         # settings for Conjugate Gradient method for solving poisson equation
         self.r = ti.field(float, shape=(self.res_x, self.res_y))
         self.d = ti.field(float, shape=(self.res_x, self.res_y))
@@ -82,8 +79,6 @@ class Plume2d():
         # if args['bodies'] is not None:
         self.bodies = args['bodies']
         self._cell = ti.field(int, shape=(self.res_x, self.res_y))
-        self.solid = ti.field(int, shape=(self.res_x, self.res_y))
-        self.solid.fill(1)
 
         for x in range(self.res_x):
             for y in range(self.res_y):
@@ -95,9 +90,8 @@ class Plume2d():
 
                 if d < 0.0:
                     self._cell[x, y] = CELL_SOLID
-                    self.solid[x, y] = 0
                 else:
-                    self._cell[x, y] = CELL_AIR
+                    self._cell[x, y] = CELL_FLUID
                 
                 if dx > 0.45 and dx < 0.55 and dy > 0.10 and dy < 0.15:
                     self._cell[x, y] = CELL_FLUID
@@ -164,10 +158,10 @@ class Plume2d():
     @ti.kernel
     def init_particles(self):
         for i, j, ix, jx in self.particle_positions:
-            # if cell_type[i, j] == utils.FLUID:
-            self.particle_type[i, j, ix, jx] = CELL_FLUID
-            # else:
-            #     self.particle_type[i, j, ix, jx] = 0
+            if self._cell[i, j] == CELL_FLUID:
+                self.particle_type[i, j, ix, jx] = CELL_FLUID
+            else:
+                self.particle_type[i, j, ix, jx] = 0
 
             px = i * self.dx + (ix + random.random()) * self.pspace_x
             py = j * self.dx + (jx + random.random()) * self.pspace_y
@@ -205,6 +199,14 @@ class Plume2d():
                 if pos[1] >= self.res_y - self.dx:  # top boundary
                     pos[1] = self.res_y - self.dx
                     pv[1] = 0
+
+                if len(self.bodies) != 0:
+                    for body in self.bodies:
+                        d = 0.0
+                        d = ti.min(d, body.distance(pos[0], pos[1]))
+                        if d < 0.0:
+                            pos[0], pos[1] = body.closestSurfacePoint(pos[0], pos[1])
+
 
                 self.particle_positions[p] = pos
                 self.particle_velocities[p] = pv
@@ -395,7 +397,7 @@ class Plume2d():
 
     
     @ti.kernel
-    def advect_SL_rk3(self,q: ti.template(), q_tmp: ti.template() , u: ti.template(), v: ti.template()):
+    def advect_SL_rk3(self, q: ti.template(), q_tmp: ti.template() , u: ti.template(), v: ti.template()):
         ox, oy = self.get_offset(q)
         for iy, ix in self.q:
                 x = ix + ox
@@ -422,7 +424,7 @@ class Plume2d():
                 x_last = rk3(x, firstU, midU, lastU, -self.dt)
                 y_last = rk3(y, firstV, midV, lastV, -self.dt)
 
-                q_tmp[ix,iy] = self.get_value(q,x_last,y_last) #self.at(x_last,y_last) 
+                q_tmp[ix,iy] = self.get_value(q, x_last, y_last) #self.at(x_last,y_last) 
 
         copy_field(q_tmp, q)
 
@@ -502,10 +504,16 @@ class Plume2d():
         v at y=0 and y=res_y is zero
         """
         
-        for x, y in self._cell:
-            if self._cell[x, y] == CELL_SOLID:
-                self.u[x, y] = 0
-                self.v[x, y] = 0
+        # for x, y in self._cell:
+        #     if self._cell[x, y] == CELL_SOLID:
+        #         self.u[x, y] = 0
+        #         self.v[x, y] = 0
+
+        for x, y in self.u:
+            self.u[x, y] *= self._cell[x, y] * self._cell[x-1, y]
+
+        for x, y in self.v:
+            self.v[x, y] *= self._cell[x, y] * self._cell[x, y-1]
 
         ux, uy = self.u.shape
         for y in range(uy):
@@ -523,11 +531,11 @@ class Plume2d():
         """
         Set the pressure with Neumann condition
         """
-        numerator = rhs + self.pressure[x-1, y] * self.solid[x-1, y] \
-                        + self.pressure[x+1, y] * self.solid[x+1, y] \
-                        + self.pressure[x, y-1] * self.solid[x, y-1] \
-                        + self.pressure[x, y+1] * self.solid[x, y+1]
-        denominator = self.solid[x-1, y] + self.solid[x+1, y] + self.solid[x, y-1] + self.solid[x, y+1]
+        numerator = rhs + self.pressure[x-1, y] * self._cell[x-1, y] \
+                        + self.pressure[x+1, y] * self._cell[x+1, y] \
+                        + self.pressure[x, y-1] * self._cell[x, y-1] \
+                        + self.pressure[x, y+1] * self._cell[x, y+1]
+        denominator = self._cell[x-1, y] + self._cell[x+1, y] + self._cell[x, y-1] + self._cell[x, y+1]
         self.pressure[x, y] = numerator / (denominator + 1e-32)
 
     @ti.kernel
@@ -540,18 +548,18 @@ class Plume2d():
                 # self.pressure[x,y] = (dx2 * b + self.pressure[x-1, y] + self.pressure[x+1, y] + self.pressure[x, y-1] + self.pressure[x, y+1]) / 4
 
         # Compute the new residual, i.e. the sum of the squares of the individual residuals (squared L2-norm)
-        residual = 0
+        residual = ti.f32(0.0)
         for y in range(0, self.res_y):
             for x in range(0, self.res_x):
                 b = -self.divergence[x,y] / self.dt * rho
 
-                t = self.solid[x+1, y] + self.solid[x-1, y] + self.solid[x, y-1] + self.solid[x, y+1]
+                t = self._cell[x+1, y] + self._cell[x-1, y] + self._cell[x, y-1] + self._cell[x, y+1]
                 
                 cell_residual = b - (t * self.pressure[x, y] \
-                        - self.pressure[x-1, y] * self.solid[x-1, y] \
-                        - self.pressure[x+1, y] * self.solid[x+1, y] \
-                        - self.pressure[x, y-1] * self.solid[x, y-1] \
-                        - self.pressure[x, y+1] * self.solid[x, y+1]) / dx2 
+                        - self.pressure[x-1, y] * self._cell[x-1, y] \
+                        - self.pressure[x+1, y] * self._cell[x+1, y] \
+                        - self.pressure[x, y-1] * self._cell[x, y-1] \
+                        - self.pressure[x, y+1] * self._cell[x, y+1]) / dx2 
                 residual += cell_residual ** 2
         return residual
 
@@ -686,21 +694,9 @@ class Plume2d():
     def correct_velocity(self):
         # Note: velocity u_{i+1/2} is practically stored at i+1, hence xV_{i}  -= dt * (p_{i} - p_{i-1}) / dx
         for y in range(self.res_y):
-            for x in range(self.res_x):
-                if self._cell[x, y] == CELL_FLUID or self._cell[x-1, y] == CELL_FLUID:
-                    if self._cell[x, y] == CELL_SOLID or self._cell[x-1, y] == CELL_SOLID:
-                        self.u[x, y] = 0
-                    else:
-                        self.u[x, y] = self.u[x, y] - self.dt * (self.pressure[x, y] - self.pressure[x-1, y]) / self.dx                    
-                else:
-                    self.u[x, y] = self.u[x, y] - self.dt * (self.pressure[x, y] - self.pressure[x-1, y]) / self.dx
-                if self._cell[x, y] == CELL_FLUID or self._cell[x, y-1] == CELL_FLUID:
-                    if self._cell[x, y] == CELL_SOLID or self._cell[x, y-1] == CELL_SOLID:
-                        self.v[x, y] = 0
-                    else:
-                        self.v[x, y] = self.v[x, y] -  self.dt * (self.pressure[x, y] - self.pressure[x, y-1]) /self.dx
-                else:
-                    self.v[x, y] = self.v[x, y] -  self.dt * (self.pressure[x, y] - self.pressure[x, y-1]) /self.dx
+            for x in range(self.res_x):                
+                self.u[x, y] = self.u[x, y] - self.dt * (self.pressure[x, y] - self.pressure[x-1, y]) / self.dx
+                self.v[x, y] = self.v[x, y] - self.dt * (self.pressure[x, y] - self.pressure[x, y-1]) /self.dx
 
     # Integration each step
     def reset(self):
@@ -720,7 +716,6 @@ class Plume2d():
         self.v_backward.fill(0)
         self.f_x.fill(0)
         self.f_y.fill(0)
-        self.solid.fill(1)
         self.t_curr = 0
         self.n_steps = 0
         self.apply_init()
