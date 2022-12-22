@@ -1,9 +1,8 @@
 import taichi as ti
 
 
-FLUID = 0
-AIR = 1
-SOLID = 2
+PARTICLE_FLUID = 1
+PARTICLE_OTHER = 0
 
 @ti.pyfunc
 def vec2(x, y):
@@ -48,7 +47,7 @@ def euler(y0, vel, dt):
 
 @ti.func 
 def rk3(y0, k1, k2, k3, dt):
-    return y0 + dt * ((2.0/9.0) * k1+ (1.0 / 3.0) * k2+ (4.0 / 9.0) * k3)
+    return y0 + dt * ((2.0/9.0) * k1+ (3.0 / 9.0) * k2+ (4.0 / 9.0) * k3)
 
 # Compute the divergence for a velocity field 
 @ti.kernel

@@ -10,7 +10,7 @@ from Solid import SolidBox, SolidSphere
 @click.option('-x', '--res_x', default=256, help='Resolution x', show_default=True)
 @click.option('-y', '--res_y', default=256, help='Resolution y', show_default=True)
 @click.option('--dx', default=1, help='dx', show_default=True)
-@click.option('--dt', default=0.04, help='dt', show_default=True)
+@click.option('--dt', default=0.002, help='dt', show_default=True)
 @click.option('--accuracy', default=1e-4, help='accuracy', show_default=True)
 @click.option('--n_iters', default=100, help='number of iterations', show_default=True) #TODO
 @click.option('--substeps', default=20, help='number of substeps', show_default=True)
@@ -50,7 +50,6 @@ def main(gpu, res_x, res_y, dx, dt, accuracy, n_iters,
     }
 
     plume = Plume2d(args)
-
     # For rendering
     renderer = Renderer(res_x, res_y, dx, plume._cell)
 
