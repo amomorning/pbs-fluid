@@ -4,10 +4,10 @@ from Renderer import Renderer
 
 ti.init(arch=ti.cuda)
 
-res_x = 256
+res_x = 512
 res_y = int(res_x * 1)
-dx = 1
-dt = 0.005 * ti.sqrt((res_x + res_y) * 0.5) / 4
+dx = 0.5
+dt = 0.005 * ti.sqrt((res_x + res_y) * dx * 0.5) / 4
 accuracy = 1e-5
 n_iters = 100
 advection = "MAC"
@@ -57,8 +57,8 @@ while (window.running):
         plume.substep()
     renderer.render(plume.density, ti.Vector([0,0,0]), ti.Vector([1,1,1]))
 
-    camera.position(plume.res_x / 2, plume.res_y / 2, 300)
-    camera.lookat(plume.res_x / 2, plume.res_y / 2, 0)
+    camera.position(plume.res_x * dx / 2, plume.res_y * dx / 2, 300)
+    camera.lookat(plume.res_x * dx / 2, plume.res_y * dx / 2, 0)
     scene.set_camera(camera)
 
     scene.ambient_light((1, 1, 1))

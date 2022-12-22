@@ -515,15 +515,20 @@ class Plume2d():
             for x in range(0, self.res_x):
                 b = -self.divergence[x, y] / self.dt * rho
                 # Update in place
-                # self.set_pressure(x, y, dx2 * b)
-                self.pressure[x,y] = (dx2 * b + self.pressure[x-1, y] + self.pressure[x+1, y] + self.pressure[x, y-1] + self.pressure[x, y+1]) / 4
+                self.set_pressure(x, y, dx2 * b)
+                # self.pressure[x,y] = (dx2 * b + self.pressure[x-1, y] + self.pressure[x+1, y] + self.pressure[x, y-1] + self.pressure[x, y+1]) / 4
 
         # Compute the new residual, i.e. the sum of the squares of the individual residuals (squared L2-norm)
         residual = 0
         for y in range(0, self.res_y):
             for x in range(0, self.res_x):
                 b = -self.divergence[x,y] / self.dt * rho
-                cell_residual = b - (4 * self.pressure[x, y] - self.pressure[x-1, y] - self.pressure[x+1, y] - self.pressure[x, y-1] - self.pressure[x, y+1]) / dx2 
+                numerator = + self.pressure[x-1, y] * self.celltype[x-1, y] \
+                            + self.pressure[x+1, y] * self.celltype[x+1, y] \
+                            + self.pressure[x, y-1] * self.celltype[x, y-1] \
+                            + self.pressure[x, y+1] * self.celltype[x, y+1]
+                denominator = self.celltype[x-1, y] + self.celltype[x+1, y] + self.celltype[x, y-1] + self.celltype[x, y+1]
+                cell_residual = b - (denominator * self.pressure[x, y] - numerator) / dx2 
                 residual += cell_residual ** 2
         return residual
 
@@ -744,10 +749,10 @@ class Plume2d():
             pass
         else:
             self.advect_SL(self.density, self.density_tmp, self.u, self.v)
-            self.advect_SL(self.u_tmp, self.u_tmp, self.u, self.v)
-            self.advect_SL(self.v_tmp, self.v_tmp, self.u, self.v)
-            self.copy_to(self.u_tmp, self.u)
-            self.copy_to(self.v_tmp, self.v)
+            self.advect_SL(self.u_half, self.u_tmp, self.u, self.v)
+            self.advect_SL(self.v_half, self.v_tmp, self.u, self.v)
+            self.copy_to(self.u_half, self.u)
+            self.copy_to(self.v_half, self.v)
 
     def projection(self):
         # Prepare the Poisson equation (r.h.s)
