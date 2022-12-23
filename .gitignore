@@ -262,3 +262,4 @@ dmypy.json
 .DS_Store
 
 output*
+imgs/

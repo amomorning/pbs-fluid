@@ -38,19 +38,20 @@ python plume_sim.py -a SL -e bilerp -s CG -b
 
 ### No solid
 
+
+
 |     | bilerp/euler                                 | + reflection                                | cerp/rk3                                   | + reflection                            |
 | --- | -------------------------------------------- | ------------------------------------------- | ------------------------------------------ | --------------------------------------- |
-| MAC | ![](res/MAC_bilerp_euler_GS_False_False.gif) | ![](res/MAC_bilerp_euler_GS_True_False.gif) | ![](res/MAC_cerp_rk3_GS_False_False.gif)   | ![](res/MAC_cerp_rk3_GS_True_False.gif) |
-| SL  |                                              |                                             | ![](res/SL_cerp_rk3_GS_False_False.gif) |                                         |
+| MAC | ![](results/MAC_bilerp_euler_GS_False_False.gif) | ![](results/MAC_bilerp_euler_GS_True_False.gif) | ![](results/MAC_cerp_rk3_GS_False_False.gif)   | ![](results/MAC_cerp_rk3_GS_True_False.gif) |
+| SL  |![](results/SL_bilerp_euler_GS_False_False.gif) | ![](results/SL_bilerp_euler_GS_True_False.gif) | ![](results/SL_cerp_rk3_GS_False_False.gif) | ![](results/SL_cerp_rk3_GS_True_False.gif)  |
 
 
 
 ### With solid
 |     | bilerp/euler                                | + reflection                               | cerp/rk3                                  | + reflection                           |
 | --- | ------------------------------------------- | ------------------------------------------ | ----------------------------------------- | -------------------------------------- |
-| MAC | ![](res/MAC_bilerp_euler_GS_False_True.gif) | ![](res/MAC_bilerp_euler_GS_True_True.gif) | ![](res/MAC_cerp_rk3_GS_False_True.gif)   | ![](res/MAC_cerp_rk3_GS_True_True.gif) |
-| SL  |                                             |                                            | ![](res/SL_cerp_rk3_GS_False_True.gif) |                                        |
-
+| MAC | ![](results/MAC_bilerp_euler_GS_False_True.gif) | ![](results/MAC_bilerp_euler_GS_True_True.gif) | ![](results/MAC_cerp_rk3_GS_False_True.gif)   | ![](results/MAC_cerp_rk3_GS_True_True.gif) |
+| SL  | ![](results/SL_bilerp_euler_GS_False_True.gif) | ![](results/SL_bilerp_euler_GS_True_True.gif) | ![](results/SL_cerp_rk3_GS_False_True.gif)   | ![](results/SL_cerp_rk3_GS_True_True.gif) |
 
 
 ## Theory
@@ -74,7 +75,7 @@ A simple fluid simulation algorithm contains the following steps
 
 ## Data Structure
 The entire simulation occurs in a MAC grid
-![Grid](res/Grid_annotated.png)
+![Grid](results/Grid_annotated.png)
 The origin is set to be the left-bottom corner of the grid. Since in code, the values of quantities are saved on integer positions, for example, `p[0,0]` corresponds $p(0.5, 0.5)$ on grid. Thus we define the offset to be the $(x, y)$ difference between the left-bottom position and the origin. In resume, 
 - $\text{offset}(\text{pressure}) = (0.5, 0.5)$
 - $\text{offset}(\text{velocity}_{x}) = (0.0, 0.5)$
@@ -126,7 +127,7 @@ It greatly improves integration accuracy without being overly complex.
 
 ### MacCormack
 The MacCormack algorithm is simple but greatly reduce the error induced by Semi-Lagrangian
-![](res/MacCormack.png)
+![](results/MacCormack.png)
 
 ### FLIP/PIC
 This simple but efficient algorithm provides great improvement to the visual effect. However, due to our incomplete understanding on Taichi, we only have an incomplete version of FLIP. 
