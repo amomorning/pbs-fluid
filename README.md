@@ -35,7 +35,23 @@ python plume_sim.py -a SL -e bilerp -s CG -b
 
 ## Results
 
-<!-- TODO -->
+
+### No solid
+
+|     | bilerp/euler                                 | + reflection                                | cerp/rk3                                   | + reflection                            |
+| --- | -------------------------------------------- | ------------------------------------------- | ------------------------------------------ | --------------------------------------- |
+| MAC | ![](res/MAC_bilerp_euler_GS_False_False.gif) | ![](res/MAC_bilerp_euler_GS_True_False.gif) | ![](res/MAC_cerp_rk3_GS_False_False.gif)   | ![](res/MAC_cerp_rk3_GS_True_False.gif) |
+| SL  |                                              |                                             | ![](res/SL_cerp_rk3_GS_False_False.gif) |                                         |
+
+
+
+### With solid
+|     | bilerp/euler                                | + reflection                               | cerp/rk3                                  | + reflection                           |
+| --- | ------------------------------------------- | ------------------------------------------ | ----------------------------------------- | -------------------------------------- |
+| MAC | ![](res/MAC_bilerp_euler_GS_False_True.gif) | ![](res/MAC_bilerp_euler_GS_True_True.gif) | ![](res/MAC_cerp_rk3_GS_False_True.gif)   | ![](res/MAC_cerp_rk3_GS_True_True.gif) |
+| SL  |                                             |                                            | ![](res/SL_cerp_rk3_GS_False_True.gif) |                                        |
+
+
 
 ## Theory
 To solve a fluid simulation problem, we divide the problem into three steps.
@@ -123,34 +139,30 @@ This step is fairly easy. Just update the velocity using Euler method
 Remember to set the boundary condition for velocity after this step
 
 ## Projection
-The `project` routine will substract off the pressure gradient from the intermediate velocity field $\mathbf{u}$:
-$$
-\mathbf{u}^{n+1} = \mathbf{u} - \Delta t \frac{1}{\rho}\nabla p
-$$
+The `project` routine will substract off the pressure gradient from the intermediate velocity field $\mathbf{u}$:  
+
+$$\mathbf{u}^{n+1} = \mathbf{u} - \Delta t \frac{1}{\rho}\nabla p$$
+
 so that the result satisfies incompressibility inside the fluid
-$$
-\nabla \cdot \mathbf{u}^{n+1} = 0
-$$
+
+$$\nabla \cdot \mathbf{u}^{n+1} = 0$$
+
 and satisfies the solid wall boundary conditions
-$$
-\mathbf{u}^{n+1} \cdot \mathbf{n} = \mathbf{u}_{\text{solid}}\cdot \mathbf{n}
-$$
+
+$$\mathbf{u}^{n+1} \cdot \mathbf{n} = \mathbf{u}_{\text{solid}}\cdot \mathbf{n}$$
 
 Using the central difference approximations the update rule is 
-$$
-\begin{aligned}
+
+$$\begin{aligned}
 &u_{i+1 / 2, j}^{n+1}=u_{i+1 / 2, j}-\Delta t \frac{1}{\rho} \frac{p_{i+1, j}-p_{i, j}}{\Delta x} \\
-&v_{i, j+1 / 2}^{n+1}=v_{i, j+1 / 2}-\Delta t \frac{1}{\rho} \frac{p_{i, j+1}-p_{i, j}}{\Delta x}
-\end{aligned}
-$$
+&v_{i, j+1 / 2}^{n+1}=v_{i, j+1 / 2}-\Delta t \frac{1}{\rho} \frac{p_{i, j+1}-p_{i, j}}{\Delta x}\end{aligned}$$
+
 and in 3D
-$$
-\begin{aligned}
+
+$$\begin{aligned}
 &u_{i+1 / 2, j, k}^{n+1}=u_{i+1 / 2, j, k}-\Delta t \frac{1}{\rho} \frac{p_{i+1, j, k}-p_{i, j, k}}{\Delta x} \\
 &v_{i, j+1 / 2, k}^{n+1}=v_{i, j+1 / 2, k}-\Delta t \frac{1}{\rho} \frac{p_{i, j+1, k}-p_{i, j, k}}{\Delta x} \\
-&w_{i, j, k+1 / 2}^{n+1}=w_{i, j, k+1 / 2}-\Delta t \frac{1}{\rho} \frac{p_{i, j, k+1}-p_{i, j, k}}{\Delta x}
-\end{aligned}
-$$
+&w_{i, j, k+1 / 2}^{n+1}=w_{i, j, k+1 / 2}-\Delta t \frac{1}{\rho} \frac{p_{i, j, k+1}-p_{i, j, k}}{\Delta x}\end{aligned}$$
 
 However the pressure we use in the `project` routine must make $\mathbf{u}^{n+1}$ divergence-free and satisfies the boundary conditions. We will see later this turns out to be a liner system on $p$ with constraints.
 

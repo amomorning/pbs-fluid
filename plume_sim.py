@@ -22,9 +22,10 @@ from Solid import SolidBox, SolidSphere
 @click.option('-w', '--wind', default=False, is_flag=True, help='boolean flag to add wind')
 @click.option('-b', '--body', default=False, is_flag=True, help='boolean flag to add default solid bodies')
 @click.option('-o', '--output', default=False, is_flag=True, help='boolean flag for output step png to output folder')
+@click.option('-f', '--frames', default=500, help='number of images in the output')
 def main(gpu, res_x, res_y, dx, dt, accuracy, n_iters, 
         advection, interpolation, integration, solver, 
-        reflection, wind, body, output, substeps):
+        reflection, wind, body, output, substeps, frames):
     if gpu: ti.init(arch=ti.cuda)
     else: ti.init(arch=ti.cpu)
 
@@ -63,7 +64,7 @@ def main(gpu, res_x, res_y, dx, dt, accuracy, n_iters,
 
     frame = 0
 
-    while window.running:
+    while window.running and frame < frames:
 
         for _ in range(substeps):
             plume.substep()
@@ -84,7 +85,7 @@ def main(gpu, res_x, res_y, dx, dt, accuracy, n_iters,
         canvas.scene(scene)
         
         if output:
-            window.save_image(f"./output/{advection}_{interpolation}_{integration}_{solver}_{reflection}_{frame:05d}.png")
+            window.save_image(f"./output/{advection}_{interpolation}_{integration}_{solver}_{reflection}_{body}_{frame:05d}.png")
         window.show()
 
         frame += 1
