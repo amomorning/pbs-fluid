@@ -80,7 +80,7 @@ A simple fluid simulation algorithm contains the following steps
 
 ## Data Structure
 The entire simulation occurs in a MAC grid
-![Grid](results/Grid_annotated.png)
+![Grid](res/Grid_annotated.png)
 The origin is set to be the left-bottom corner of the grid. Since in code, the values of quantities are saved on integer positions, for example, `p[0,0]` corresponds $p(0.5, 0.5)$ on grid. Thus we define the offset to be the $(x, y)$ difference between the left-bottom position and the origin. In resume, 
 - $\text{offset}(\text{pressure}) = (0.5, 0.5)$
 - $\text{offset}(\text{velocity}_{x}) = (0.0, 0.5)$
@@ -133,7 +133,7 @@ It greatly improves integration accuracy without being overly complex.
 
 ### MacCormack
 The MacCormack algorithm is simple but greatly reduce the error induced by Semi-Lagrangian
-![](results/MacCormack.png)
+![Mac](res/MacCormack.png)
 
 ### FLIP/PIC
 This simple but efficient algorithm provides great improvement to the visual effect. However, due to our incomplete understanding on Taichi, we only have an incomplete version of FLIP. 
