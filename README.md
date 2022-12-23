@@ -53,6 +53,11 @@ python plume_sim.py -a SL -e bilerp -s CG -b
 | MAC | ![](results/MAC_bilerp_euler_GS_False_True.gif) | ![](results/MAC_bilerp_euler_GS_True_True.gif) | ![](results/MAC_cerp_rk3_GS_False_True.gif)   | ![](results/MAC_cerp_rk3_GS_True_True.gif) |
 | SL  | ![](results/SL_bilerp_euler_GS_False_True.gif) | ![](results/SL_bilerp_euler_GS_True_True.gif) | ![](results/SL_cerp_rk3_GS_False_True.gif)   | ![](results/SL_cerp_rk3_GS_True_True.gif) |
 
+### MICPCG Pressure Solver
+|     | cerp/rk3                                  | + reflection |
+|:----|:-----------------------------------------:|-------------:|
+|SL|[<img src="results/MIC_SL.gif" width="250"/>](results/MIC_SL.gif)| |
+
 
 ## Theory
 To solve a fluid simulation problem, we divide the problem into three steps.
