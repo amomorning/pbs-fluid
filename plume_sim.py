@@ -7,13 +7,13 @@ from Solid import SolidBox, SolidSphere
 
 @click.command()
 @click.option('--gpu/--no-gpu', default=True, help='Use cuda if gpu is available', show_default=True)
-@click.option('-x', '--res_x', default=256, help='Resolution x', show_default=True)
-@click.option('-y', '--res_y', default=256, help='Resolution y', show_default=True)
+@click.option('-x', '--res_x', default=512, help='Resolution x', show_default=True)
+@click.option('-y', '--res_y', default=512, help='Resolution y', show_default=True)
 @click.option('--dx', default=1, help='dx', show_default=True)
 @click.option('--dt', default=0.02, help='dt', show_default=True)
-@click.option('--accuracy', default=1e-5, help='accuracy', show_default=True)
-@click.option('--n_iters', default=100, help='number of iterations', show_default=True) 
-@click.option('--substeps', default=20, help='number of substeps', show_default=True)
+@click.option('--accuracy', default=1e-4, help='accuracy', show_default=True)
+@click.option('--n_iters', default=100, help='maximum number of iterations', show_default=True) 
+@click.option('--substeps', default=80, help='number of substeps', show_default=True)
 @click.option('-a', '--advection', default='MAC', type=click.Choice(['MAC', 'SL', 'FLIP'], case_sensitive=False), help='advection method', show_default=True)
 @click.option('-e', '--interpolation', default='cerp', type=click.Choice(['cerp', 'bilerp'], case_sensitive=False), help='interpolation method', show_default=True)
 @click.option('-i', '--integration', default='rk3', type=click.Choice(['rk3', 'euler'], case_sensitive=False), help='integration method', show_default=True)
@@ -55,7 +55,7 @@ def main(gpu, res_x, res_y, dx, dt, accuracy, n_iters,
     renderer = Renderer(res_x, res_y, dx, plume._cell)
 
 
-    window = ti.ui.Window("Plume 2d", (res_x*2, res_y*2),
+    window = ti.ui.Window("Plume 2d", (512, 512),
                         vsync=True)
     canvas = window.get_canvas()
     canvas.set_background_color((0, 0, 0))
@@ -64,7 +64,8 @@ def main(gpu, res_x, res_y, dx, dt, accuracy, n_iters,
 
     frame = 0
 
-    while window.running and frame < frames:
+    while window.running:
+        if frame > 500: break
 
         for _ in range(substeps):
             plume.substep()
