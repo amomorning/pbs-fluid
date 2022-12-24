@@ -208,7 +208,7 @@ where $\widetilde{\textbf{u}}^{1/2}, {\textbf{u}}^{1/2}, \widehat{\textbf{u}}^{1
 
 ## Known Issues
 - FLIP for now couldn't cooperate with solid
-- MIC solver is sensitive to the blending coefficient
+- MIC solver is sensitive to the simulation parameters (blending coefficient, dt, dx)
 
 ## Reference
 
