@@ -57,7 +57,7 @@ python plume_sim.py -a SL -e bilerp -s CG -b
 |     | cerp/rk3                                  | + reflection |
 |:----|:-----------------------------------------:|-------------:|
 |SL|[<img src="results/MIC_SL_new.gif" width="250"/>](results/MIC_SL.gif)|[<img src="results/MIC_SL_R.gif" width="250"/>](results/MIC_SL_R.gif) |
-|MAC|[<img src="results/MIC_MAC.gif" width="250"/>](results/MIC_MAC.gif)||
+|MAC|[<img src="results/MIC_MAC.gif" width="250"/>](results/MIC_MAC.gif)|[<img src="results/MIC_MAC_true.gif" width="250"/>](results/MIC_MAC_true.gif)|
 
 
 ## Theory
