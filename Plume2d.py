@@ -112,7 +112,7 @@ class Plume2d():
         #settings for MICPCG for solving poisson equation
         self.p_solver = None
         if(self.preconditioning):
-            self.p_solver = MICPCGSolver(self.res_x, self.res_y, self.u, self.v, cell_type=self._cell, MIC_blending=0.5)
+            self.p_solver = MICPCGSolver(self.res_x, self.res_y, self.u, self.v, cell_type=self._cell, MIC_blending=0.50)
 
         self.print_info()
         self.reset()
