@@ -56,7 +56,8 @@ python plume_sim.py -a SL -e bilerp -s CG -b
 ### MICPCG Pressure Solver
 |     | cerp/rk3                                  | + reflection |
 |:----|:-----------------------------------------:|-------------:|
-|SL|[<img src="results/MIC_SL.gif" width="250"/>](results/MIC_SL.gif)| |
+|SL|[<img src="results/MIC_SL_new.gif" width="250"/>](results/MIC_SL.gif)|[<img src="results/MIC_SL_R.gif" width="250"/>](results/MIC_SL_R.gif) |
+|MAC|[<img src="results/MIC_MAC.gif" width="250"/>](results/MIC_MAC.gif)||
 
 
 ## Theory
