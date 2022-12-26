@@ -119,13 +119,13 @@ then we could update the state and say that the particle at $\mathbf{x}_{G}$ at 
 Putting all together, the simplest semi-Lagrangian formula is 
 
 $$
-q_g^{n+1} = \textsf{intpolate}(q^{n}, \mathbf{x}_G-\Delta t\mathbf{u}_G)
+q_g^{n+1} = \textsf{intpolate}(q^{n}, \mathbf{x}_G-\Delta\,t\mathbf{u}_G)
 $$
 
 Different integration schemes could be used in this step, i.e. the step
 
 $$
-\mathbf{x}_{P} = \mathbf{x}_{G} - \Delta t \mathbf{u}_{G}
+\mathbf{x}_{P} = \mathbf{x}_{G} - \Delta\,t \mathbf{u}_{G}
 $$
 We could use
 - Euler
