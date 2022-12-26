@@ -110,23 +110,20 @@ The new value of $q$ at some point $\mathbf{x}$ in space is just what the old va
 
 Imagine we have a hypothetical particle. At time $t$, it has an old value $q_P^{n}$ at point $\mathbf{x}_P$, and at time $t+\Delta\,t$, it has a new value $q^{n+1}_G$ at point $\mathbf{x}_G$. Then $q_G^{n+1}=q_P^{n}$. 
 
-If we have the current state, we could say that after $\Delta\,t$, the particle at $\mathbf{x}_{P}$ will arrive at point $\mathbf{x}_{G}$,
+If we have the current state, we could say that after $\Delta t$, the particle at $\mathbf{x}_{P}$ will arrive at point $\mathbf{x}_{G}$,
 
-$$\mathbf{x}_{P}=\mathbf{x}_{G}-\Delta\,t\mathbf{u}_{G}$$
+$$\mathbf{x}_{P}=\mathbf{x}_{G}-\Delta t\mathbf{u}_{G}$$
 
-then we could update the state and say that the particle at $\mathbf{x}_{G}$ at $t+\Delta\,t$ has value $q_P^n$. If the point $\mathbf{x}_{P}$ is not on the grid, we could interpolate it from $q^n$ at nearby grid points. 
+then we could update the state and say that the particle at $\mathbf{x}_{G}$ at $t+\Delta t$ has value $q_P^n$. If the point $\mathbf{x}_{P}$ is not on the grid, we could interpolate it from $q^n$ at nearby grid points. 
 
 Putting all together, the simplest semi-Lagrangian formula is 
 
-$$
-q_g^{n+1}=\textsf{intpolate}(q^{n},\mathbf{x}_G-\Delta\,t\mathbf{u}_G)
-$$
+$$q_g^{n+1}=\textsf{intpolate}(q^{n},\mathbf{x}_G-\Delta t\mathbf{u}_G)$$
 
 Different integration schemes could be used in this step, i.e. the step
 
-$$
-\mathbf{x}_{P}=\mathbf{x}_{G}-\Delta\,t\mathbf{u}_{G}
-$$
+$$\mathbf{x}_{P}=\mathbf{x}_{G}-\Delta t\mathbf{u}_{G}$$
+
 We could use
 - Euler
 - 3rd Order Runge-Kutta 
