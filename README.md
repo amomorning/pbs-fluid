@@ -1,4 +1,4 @@
-# Physically based Fluid Simulation
+# Detail-Preserving Fluid Simulation
 
 This is a course project of 252-0546-00L Physically-Based Simulation in Computer Graphics HS2022 at ETH Zurich. We wish to provide an easy-to-understand pipeline for fluid simulation incorporating different basic algorithms. We assume that you have some basic theoretical understanding about fluid simulation
 
@@ -108,13 +108,13 @@ You may ask how to deal with position where bilerp or cerp are not defined on th
 This is a simple, physically-motivated approach. The idea is very simple: 
 The new value of $q$ at some point $\mathbf{x}$ in space is just what the old value of $q$ was for the particle that ends up at $\mathbf{x}$. 
 
-Imagine we have a hypothetical particle. At time $t$, it has an old value $q_P^{n}$ at point $\mathbf{x}_P$, and at time $t+\Delta t$, it has a new value $q^{n+1}_G$ at point $\mathbf{x}_G$. Then $q_G^{n+1} = q_P^{n}$. 
+Imagine we have a hypothetical particle. At time $t$, it has an old value $q_P^{n}$ at point $\mathbf{x}_P$, and at time $t+\Delta\,t$, it has a new value $q^{n+1}_G$ at point $\mathbf{x}_G$. Then $q_G^{n+1} = q_P^{n}$. 
 
 If we have the current state, we could say that after $\Delta t$, the particle at $\mathbf{x}_{P}$ will arrive at point $\mathbf{x}_{G}$,
 
-$$\mathbf{x}_{P} = \mathbf{x}_{G} - \Delta t \mathbf{u}_{G}$$
+$$\mathbf{x}_{P} = \mathbf{x}_{G} - \Delta\,t \mathbf{u}_{G}$$
 
-then we could update the state and say that the particle at $\mathbf{x}_{G}$ at $t+\Delta t$ has value $q_P^n$. If the point $\mathbf{x}_{P}$ is not on the grid, we could interpolate it from $q^n$ at nearby grid points. 
+then we could update the state and say that the particle at $\mathbf{x}_{G}$ at $t+\Delta\,t$ has value $q_P^n$. If the point $\mathbf{x}_{P}$ is not on the grid, we could interpolate it from $q^n$ at nearby grid points. 
 
 Putting all together, the simplest semi-Lagrangian formula is 
 
