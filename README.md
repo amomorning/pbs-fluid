@@ -42,7 +42,7 @@ python plume_sim.py -a SL -e bilerp -s CG -b
 
 |     | bilerp/euler                                 | + reflection                                | cerp/rk3                                   | + reflection                            |
 | --- | -------------------------------------------- | ------------------------------------------- | ------------------------------------------ | --------------------------------------- |
-| MAC | ![](results/MAC_bilerp_euler_GS_False_False.gif) | ![](results/MAC_bilerp_euler_GS_True_False.gif) | ![](results/MAC_cerp_rk3_GS_False_False.gif)   | ![](results/MAC_cerp_rk3_GS_True_False.gif) |
+| MAC | ![](results/MAC_bilerp_euler_GS_False_False.gif =250x250) | ![](results/MAC_bilerp_euler_GS_True_False.gif) | ![](results/MAC_cerp_rk3_GS_False_False.gif)   | ![](results/MAC_cerp_rk3_GS_True_False.gif) |
 | SL  |![](results/SL_bilerp_euler_GS_False_False.gif) | ![](results/SL_bilerp_euler_GS_True_False.gif) | ![](results/SL_cerp_rk3_GS_False_False.gif) | ![](results/SL_cerp_rk3_GS_True_False.gif)  |
 
 
