@@ -53,11 +53,11 @@ python plume_sim.py -a SL -e bilerp -s CG -b
 | MAC | ![](results/MAC_bilerp_euler_GS_False_True.gif) | ![](results/MAC_bilerp_euler_GS_True_True.gif) | ![](results/MAC_cerp_rk3_GS_False_True.gif)   | ![](results/MAC_cerp_rk3_GS_True_True.gif) |
 | SL  | ![](results/SL_bilerp_euler_GS_False_True.gif) | ![](results/SL_bilerp_euler_GS_True_True.gif) | ![](results/SL_cerp_rk3_GS_False_True.gif)   | ![](results/SL_cerp_rk3_GS_True_True.gif) |
 
-### MICPCG Pressure Solver
+### MICPCG Pressure Solver (res:128 × 128)
 |     | cerp/rk3                                  | + reflection |
 |:----|:-----------------------------------------:|-------------:|
-|SL|[<img src="results/MIC_SL_new.gif" width="250"/>](results/MIC_SL.gif)|[<img src="results/MIC_SL_R.gif" width="250"/>](results/MIC_SL_R.gif) |
-|MAC|[<img src="results/MIC_MAC_new.gif" width="250"/>](results/MIC_MAC_new.gif)|[<img src="results/MIC_MAC_true.gif" width="250"/>](results/MIC_MAC_true.gif)|
+|SL|[<img src="results/MIC_SL_new.gif" width="200"/>](results/MIC_SL.gif)|[<img src="results/MIC_SL_R.gif" width="200"/>](results/MIC_SL_R.gif) |
+|MAC|[<img src="results/MIC_MAC_new.gif" width="200"/>](results/MIC_MAC_new.gif)|[<img src="results/MIC_MAC_true.gif" width="200"/>](results/MIC_MAC_true.gif)|
 
 
 ## Theory
